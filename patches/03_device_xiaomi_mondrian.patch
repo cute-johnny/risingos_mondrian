@@ -1,8 +1,43 @@
-﻿diff --git a/device.mk b/device.mk
-index fb9a0d5..04146c5 100644
+diff --git a/configs/memory-limiter-config.xml b/configs/memory-limiter-config.xml
+new file mode 100644
+index 0000000..9d0f3c4
+--- /dev/null
++++ b/configs/memory-limiter-config.xml
+@@ -0,0 +1,29 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!-- Per-app memory limits for MemoryLimiter (values in MB, ~% of MemTotal).
++     The limit set with the largest minimumRequiredMemTotal <= MemTotal is used. -->
++<MemoryLimiterConfig>
++    <version>1</version>
++    <configList>
++        <limitSet>
++            <minimumRequiredMemTotal>6800</minimumRequiredMemTotal>
++            <memVisible>3700</memVisible>
++            <memNotVisible>1850</memNotVisible>
++            <swapVisible>1850</swapVisible>
++            <swapNotVisible>1850</swapNotVisible>
++        </limitSet>
++        <limitSet>
++            <minimumRequiredMemTotal>9216</minimumRequiredMemTotal>
++            <memVisible>5580</memVisible>
++            <memNotVisible>2790</memNotVisible>
++            <swapVisible>2790</swapVisible>
++            <swapNotVisible>2790</swapNotVisible>
++        </limitSet>
++        <limitSet>
++            <minimumRequiredMemTotal>14336</minimumRequiredMemTotal>
++            <memVisible>7600</memVisible>
++            <memNotVisible>3800</memNotVisible>
++            <swapVisible>3800</swapVisible>
++            <swapNotVisible>3800</swapNotVisible>
++        </limitSet>
++    </configList>
++</MemoryLimiterConfig>
+diff --git a/device.mk b/device.mk
+index fb9a0d5..7c3d214 100644
 --- a/device.mk
 +++ b/device.mk
-@@ -58,3 +58,34 @@ DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += \
+@@ -58,3 +58,38 @@ DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += \
  # Call the MiuiCamera setup
  $(call inherit-product-if-exists, device/xiaomi/miuicamera-mondrian/device.mk)
  
@@ -37,6 +72,10 @@ index fb9a0d5..04146c5 100644
 +# Re-enable: settings put secure spoof_activated 1
 +PRODUCT_PRODUCT_PROPERTIES += \
 +    persist.sys.spoof.auto_activate=false
++
++# MemoryLimiter: per-app cgroup v2 memory.high / swap limits (per RAM tier)
++PRODUCT_COPY_FILES += \
++    $(LOCAL_PATH)/configs/memory-limiter-config.xml:$(TARGET_COPY_OUT_VENDOR)/etc/memory-limiter-config.xml
 diff --git a/lineage_mondrian.mk b/lineage_mondrian.mk
 index 040a1fb..9c1ea11 100644
 --- a/lineage_mondrian.mk

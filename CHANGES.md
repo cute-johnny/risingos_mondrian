@@ -16,6 +16,7 @@ Every modified repository on the VM is tracked in Git (`repo`), so the entire cu
 | **Phase 1 RAM (`05_ram_opt_build`)** | `RisingOS-9-261115-1939` (`rc=0`) | Enabled `CONFIG_ZRAM_WRITEBACK=y`, handed ZRAM init from `init.kernel.post_boot.sh` to Android 17 `mmd` (`lz4`, 75% size, 1 GiB writeback), raised `swappiness=120`, tuned `ro.lmk.*`, halved cached app freezer debounce to `5000ms` |
 | **Issues + Step 1 (`06_issues_step1_build`)** | `RisingOS-9-261115-2250` (`rc=0`) | Fixed MiuiCamera `platform_app_36` SELinux crash, made RisingOS spoofer opt-in (`AxSpoofManager.java` + `persist.sys.spoof.auto_activate=false`), set UFS `nr_tags=31` + `ro.lmk.kill_timeout_ms=100`, cleaned upstream conflict markers in `product.prop` |
 | **Cgroup v2 / `nokmem` Fix (`07_nokmem_build`)** | **`RisingOS-9-261116-0018`** (`rc=0`) | Removed `cgroup_disable=pressure cgroup.memory=nokmem` via `CONFIG_CMDLINE` in `mondrian_GKI.config` and stripped legacy cgroup v1 `memory/bg/memory.swappiness` blocks from `init.qcom.rc` & `init.qti.kernel.rc` |
+| **Step 2 MemoryLimiter (`08_memlimiter_build`)** | **`RisingOS-9-261116-1850`** (`rc=0`) | Shipped `/vendor/etc/memory-limiter-config.xml` (per-app cgroup v2 limits for 8/12/16 GB SKUs, about 50% / 25% of RAM for visible / not-visible apps). `pmgd` intentionally left without a vendor config (idle) |
 
 ---
 
@@ -53,6 +54,16 @@ Every modified repository on the VM is tracked in Git (`repo`), so the entire cu
   - `device.mk`:
     - Added `PRODUCT_VENDOR_PROPERTIES`: `mmd.zram.enabled=true`, `mmd.zram.comp_algorithm=lz4`, `mmd.zram.size=75%`, `mmd.zram.writeback.enabled=true`, `mmd.zram.writeback.device_size=1073741824`, `mmd.zram.writeback.min_free_space_mib=2048`, `mmd.zram.writeback.idle.enabled=true`, `mmd.zram.writeback.huge_idle.enabled=true`, `mmd.zram.writeback.use_nr_tags_prop=true`, `mmd.zram.writeback.nr_tags=31` (matching UFS 32-slot queue minus 1 reserved in `ufshcd.c` so `mmd_setup` avoids sysfs SELinux denials).
     - Added `PRODUCT_PRODUCT_PROPERTIES`: `ro.lmk.kill_heaviest_task=true`, `ro.lmk.psi_partial_stall_ms=100`, `ro.lmk.thrashing_limit=100`, `ro.lmk.swap_free_low_percentage=10`, `ro.lmk.kill_timeout_ms=100`, and `persist.sys.spoof.auto_activate=false` (makes built-in spoofer strictly opt-in so external `TEESimulator`/`AlwaysStrong` works).
+    - Added `PRODUCT_COPY_FILES` entry installing `configs/memory-limiter-config.xml` to `/vendor/etc/memory-limiter-config.xml`.
+  - `configs/memory-limiter-config.xml` *(new)*: enables Android 17 `MemoryLimiter` (per-app cgroup v2 `memory.high` / `memory.swap.max`). Limits scale with RAM (about 50% of MemTotal for visible apps, 25% for not-visible apps, 25% swap each):
+
+    | SKU (`minimumRequiredMemTotal`) | memVisible | memNotVisible | swapVisible | swapNotVisible |
+    | :--- | :--- | :--- | :--- | :--- |
+    | 8 GB (6800 MB) | 3700 | 1850 | 1850 | 1850 |
+    | 12 GB (9216 MB) | 5580 | 2790 | 2790 | 2790 |
+    | 16 GB (14336 MB) | 7600 | 3800 | 3800 | 3800 |
+
+    A process is killed 30 s after its anon+swap exceeds mem+swap; cached and persistent processes are not limited. Validated against `frameworks/base/services/core/xsd/memory-limiter-config/memory-limiter-config.xsd`. Runtime kill switches: `device_config put activity_manager memory_limiter_disable_limits true` / `memory_limiter_disable_kill true`.
   - `overlay/Frameworks/res/values/config.xml`:
     - Added `<integer name="config_defaultFreezerDebounceTimeout">5000</integer>` (halves cached freezer debounce from 10s to 5s).
   - `lineage_mondrian.mk` *(regenerated automatically on builds by `scripts/vm/03_configure_and_build.sh`)*:
