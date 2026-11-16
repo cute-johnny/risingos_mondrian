@@ -1,0 +1,12 @@
+﻿diff --git a/sepolicy/vendor/hal_camera_default.te b/sepolicy/vendor/hal_camera_default.te
+index f1c5be9..8c71431 100644
+--- a/sepolicy/vendor/hal_camera_default.te
++++ b/sepolicy/vendor/hal_camera_default.te
+@@ -1,6 +1,7 @@
+ type sysfs_camera, fs_type, sysfs_type;
+ 
+ binder_call(hal_camera_default, platform_app)
++binder_call(hal_camera_default, platform_app_36)
+ binder_call(hal_camera_default, cameraserver)
+ 
+ allow hal_camera_default mnt_vendor_file:dir { search };

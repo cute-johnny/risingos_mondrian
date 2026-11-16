@@ -1,0 +1,37 @@
+﻿diff --git a/arch/arm64/configs/vendor/mondrian_GKI.config b/arch/arm64/configs/vendor/mondrian_GKI.config
+index 65330279f42f..0f17b3e537d1 100644
+--- a/arch/arm64/configs/vendor/mondrian_GKI.config
++++ b/arch/arm64/configs/vendor/mondrian_GKI.config
+@@ -12,3 +12,12 @@ CONFIG_WIRELESS_REVERSE_CLOSE=y
+ 
+ # uh yes 
+ CONFIG_LOCALVERSION="-Weil+"
++
++# KernelSU Next
++CONFIG_KSU=y
++
++# ZRAM Writeback (for Android 17 mmd)
++CONFIG_ZRAM_WRITEBACK=y
++
++# Enable cgroup PSI + kmem accounting for cgroup v2 memory management (overrides gki_defconfig)
++CONFIG_CMDLINE="stack_depot_disable=on kasan.stacktrace=off kvm-arm.mode=protected"
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index dcecc9f6e33f..8cae523c94c2 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -235,4 +235,5 @@ source "drivers/interconnect/Kconfig"
+ source "drivers/counter/Kconfig"
+ 
+ source "drivers/most/Kconfig"
++source "drivers/kernelsu/Kconfig"
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index 576228037718..4e218bf0333b 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -189,3 +189,5 @@ obj-$(CONFIG_GNSS)		+= gnss/
+ obj-$(CONFIG_INTERCONNECT)	+= interconnect/
+ obj-$(CONFIG_COUNTER)		+= counter/
+ obj-$(CONFIG_MOST)		+= most/
++
++obj-$(CONFIG_KSU) += kernelsu/

@@ -1,0 +1,76 @@
+﻿diff --git a/properties/product.prop b/properties/product.prop
+index c7b0b25..87fbf17 100644
+--- a/properties/product.prop
++++ b/properties/product.prop
+@@ -7,21 +7,3 @@ persist.device_config.runtime_native_boot.iorap_readahead_enable=false
+ # Audio
+ audio.offload.min.duration.secs=30
+ media.stagefright.audio.deep=false
+-<<<<<<< HEAD
+-
+-# Bluetooth
+-bluetooth.device_id.vendor_id=0x001D
+-bluetooth.profile.a2dp.source.enabled=true
+-bluetooth.profile.avrcp.controller.enabled=true
+-bluetooth.profile.avrcp.target.enabled=true
+-bluetooth.profile.bas.client.enabled=true
+-bluetooth.profile.gatt.enabled=true
+-bluetooth.profile.hfp.ag.enabled=true
+-bluetooth.profile.hid.device.enabled=false
+-bluetooth.profile.hid.host.enabled=true
+-bluetooth.profile.map.server.enabled=true
+-bluetooth.profile.opp.enabled=true
+-bluetooth.profile.pbap.server.enabled=true
+-
+-=======
+->>>>>>> c215955 (sm8450-common: Move Bluetooth profile property to system_ext)
+diff --git a/rootdir/bin/init.kernel.post_boot.sh b/rootdir/bin/init.kernel.post_boot.sh
+index a3bbcd4..83dd213 100644
+--- a/rootdir/bin/init.kernel.post_boot.sh
++++ b/rootdir/bin/init.kernel.post_boot.sh
+@@ -127,9 +127,9 @@ function configure_memory_parameters() {
+ 	# Set allocstall_threshold to 0 for all targets.
+ 	#
+ 
+-	configure_zram_parameters
++	# ZRAM is configured by Android 17 mmd (mmd.zram.enabled=true)
+ 	configure_read_ahead_kb_values
+-	echo 100 > /proc/sys/vm/swappiness
++	echo 120 > /proc/sys/vm/swappiness
+ 
+ 	# Disable periodic kcompactd wakeups. We do not use THP, so having many
+ 	# huge pages is not as necessary.
+diff --git a/rootdir/etc/init.qcom.rc b/rootdir/etc/init.qcom.rc
+index 08393c5..8d053a2 100644
+--- a/rootdir/etc/init.qcom.rc
++++ b/rootdir/etc/init.qcom.rc
+@@ -59,12 +59,6 @@ on init
+     symlink /sdcard /mnt/sdcard
+     symlink /sdcard /storage/sdcard0
+ 
+-    # Create cgroup mount point for memory
+-    mkdir /sys/fs/cgroup/memory/bg 0750 root system
+-    write /sys/fs/cgroup/memory/bg/memory.swappiness 140
+-    write /sys/fs/cgroup/memory/bg/memory.move_charge_at_immigrate 1
+-    chown root system /sys/fs/cgroup/memory/bg/tasks
+-    chmod 0660 /sys/fs/cgroup/memory/bg/tasks
+ 
+ on post-fs
+ 
+diff --git a/rootdir/etc/init.qti.kernel.rc b/rootdir/etc/init.qti.kernel.rc
+index 15de3a8..8b69cf1 100644
+--- a/rootdir/etc/init.qti.kernel.rc
++++ b/rootdir/etc/init.qti.kernel.rc
+@@ -49,12 +49,6 @@ on early-init
+ on init
+     wait_for_prop vendor.all.modules.ready 1
+ 
+-    # Create cgroup mount point for memory
+-    mkdir /sys/fs/cgroup/memory/bg 0750 root system
+-    write /sys/fs/cgroup/memory/bg/memory.swappiness 140
+-    write /sys/fs/cgroup/memory/bg/memory.move_charge_at_immigrate 1
+-    chown root system /sys/fs/cgroup/memory/bg/tasks
+-    chmod 0660 /sys/fs/cgroup/memory/bg/tasks
+ 
+     # update scheduler tunables
+     write /dev/cpuctl/foreground/cpu.uclamp.sched_boost_no_override 1

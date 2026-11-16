@@ -1,0 +1,137 @@
+﻿diff --git a/packages/SystemUI/src/com/android/systemui/notetask/quickaffordance/NoteTaskQuickAffordanceConfig.kt b/packages/SystemUI/src/com/android/systemui/notetask/quickaffordance/NoteTaskQuickAffordanceConfig.kt
+index 130e48ceb..a27c4e977 100644
+--- a/packages/SystemUI/src/com/android/systemui/notetask/quickaffordance/NoteTaskQuickAffordanceConfig.kt
++++ b/packages/SystemUI/src/com/android/systemui/notetask/quickaffordance/NoteTaskQuickAffordanceConfig.kt
+@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.combine
+ import kotlinx.coroutines.flow.map
+ import kotlinx.coroutines.flow.mapLatest
+ import kotlinx.coroutines.flow.onEach
++import kotlinx.coroutines.runBlocking
+ 
+ class NoteTaskQuickAffordanceConfig
+ @Inject
+@@ -175,7 +176,7 @@ constructor(
+         isEnabled &&
+             noteTaskInfoResolver.resolveInfo(
+                 QUICK_AFFORDANCE,
+-                user = controller.getUserForHandlingNotesTaking(QUICK_AFFORDANCE),
++                user = runBlocking { userResolver.getUserForHandlingNoteTaking(QUICK_AFFORDANCE) },
+             ) != null
+ }
+ 
+diff --git a/services/core/java/com/android/server/spoof/AxSpoofManager.java b/services/core/java/com/android/server/spoof/AxSpoofManager.java
+index 67d30f685..f3305fb22 100644
+--- a/services/core/java/com/android/server/spoof/AxSpoofManager.java
++++ b/services/core/java/com/android/server/spoof/AxSpoofManager.java
+@@ -87,6 +87,11 @@ public class AxSpoofManager implements IAxSpoofManager {
+     // a clean flash wipes /data and the flag with it.
+     private static final String ACTIVATED_KEY = "spoof_activated";
+     private static final String SETTINGS_PACKAGE = "com.android.settings";
++    // Device builds can set ro.spoof.auto_activate=false to make spoofing strictly
++    // opt-in (settings put secure spoof_activated 1), e.g. when an external
++    // TrickyStore/TEESimulator module owns attestation.
++    private static final String AUTO_ACTIVATE_PROP = "persist.sys.spoof.auto_activate";
++    private static final String OPTIN_MIGRATED_KEY = "spoof_optin_migrated";
+ 
+     private static final String PIF_ENABLED_KEY = "spoof_pif_enabled";
+     private static final String TRICKYSTORE_ENABLED_KEY = "spoof_trickystore_enabled";
+@@ -211,15 +216,33 @@ public class AxSpoofManager implements IAxSpoofManager {
+         mResolver.registerContentObserver(Settings.System.getUriFor(TRICKYSTORE_ENABLED_KEY),
+                 false, mObserver, UserHandle.USER_SYSTEM);
+ 
++        final boolean autoActivate =
++                android.os.SystemProperties.getBoolean(AUTO_ACTIVATE_PROP, true);
++        if (!autoActivate) migrateToOptIn();
++
+         mActivated = Settings.Secure.getIntForUser(
+                 mResolver, ACTIVATED_KEY, 0, UserHandle.USER_SYSTEM) != 0;
+         if (mActivated) {
+             seedDefaultTargetsIfUnset();
+             stagePifPropOverrides(getCached(Settings.Secure.SPOOF_PIF_CONFIG));
+         } else {
+-            Log.i(TAG, "Spoofing off until Settings is opened for the first time");
+-            registerSettingsWatcher();
++            // persist.sys.pif.* survive reboots and dirty flashes; bionic keeps serving
++            // them even while spoofing is off unless they are emptied here.
++            clearPifPropOverrides();
++            if (autoActivate) {
++                Log.i(TAG, "Spoofing off until Settings is opened for the first time");
++                registerSettingsWatcher();
++            } else {
++                Log.i(TAG, "Spoofing is opt-in (" + AUTO_ACTIVATE_PROP + "=false), staying off");
++            }
+         }
++        mResolver.registerContentObserver(Settings.Secure.getUriFor(ACTIVATED_KEY), false,
++                new ContentObserver(mHandler) {
++                    @Override
++                    public void onChange(boolean selfChange) {
++                        onActivatedSettingChanged();
++                    }
++                }, UserHandle.USER_SYSTEM);
+ 
+         mPackageAddedReceiver = new BroadcastReceiver() {
+             @Override
+@@ -306,6 +329,55 @@ public class AxSpoofManager implements IAxSpoofManager {
+         killGmsFamily();
+     }
+ 
++    /** Reacts to `settings put secure spoof_activated 0|1` without a reboot. */
++    private void onActivatedSettingChanged() {
++        final boolean want = Settings.Secure.getIntForUser(
++                mResolver, ACTIVATED_KEY, 0, UserHandle.USER_SYSTEM) != 0;
++        if (want == mActivated) return;
++        if (want) {
++            enableSpoofing();
++        } else {
++            disableSpoofing();
++        }
++    }
++
++    private void disableSpoofing() {
++        if (!mActivated) return;
++        mActivated = false;
++        // performScheduledRefresh()/refreshNow() bail out on !mActivated themselves.
++        mHandler.removeCallbacks(mRefreshAfterClear);
++        unregisterSettingsWatcher();
++        Log.i(TAG, "spoof_activated=0, disabling spoofing");
++        PlayIntegritySpoofService.getInstance().loadConfig();
++        TrickyStoreService.getInstance().initialize();
++        clearPifPropOverrides();
++        killGmsFamily();
++    }
++
++    /**
++     * One-time cleanup for dirty flashes onto an opt-in build: an earlier build
++     * auto-enabled spoofing and auto-fetched a keybox (since revoked). Turn it off
++     * and drop the auto-fetched keybox and PIF config; a user-imported keybox
++     * (spoof_trickystore_keybox_source=user) is kept.
++     */
++    private void migrateToOptIn() {
++        if (Settings.Secure.getIntForUser(
++                mResolver, OPTIN_MIGRATED_KEY, 0, UserHandle.USER_SYSTEM) != 0) return;
++        Settings.Secure.putIntForUser(mResolver, ACTIVATED_KEY, 0, UserHandle.USER_SYSTEM);
++        String source = Settings.Secure.getStringForUser(
++                mResolver, KEYBOX_SOURCE_KEY, UserHandle.USER_SYSTEM);
++        if (!KEYBOX_SOURCE_USER.equals(source)) {
++            Settings.Secure.putStringForUser(mResolver,
++                    Settings.Secure.SPOOF_TRICKYSTORE_KEYBOX, null, UserHandle.USER_SYSTEM);
++            mCache.remove(Settings.Secure.SPOOF_TRICKYSTORE_KEYBOX);
++        }
++        Settings.Secure.putStringForUser(mResolver,
++                Settings.Secure.SPOOF_PIF_CONFIG, null, UserHandle.USER_SYSTEM);
++        mCache.remove(Settings.Secure.SPOOF_PIF_CONFIG);
++        Settings.Secure.putIntForUser(mResolver, OPTIN_MIGRATED_KEY, 1, UserHandle.USER_SYSTEM);
++        Log.i(TAG, "Migrated to opt-in spoofing: disabled and cleared auto-fetched config");
++    }
++
+     /** A device RKP keybox was generated or removed: reload the settings and restart GMS. */
+     private void onDuckRkpChanged() {
+         mHandler.post(() -> {
+@@ -351,6 +423,7 @@ public class AxSpoofManager implements IAxSpoofManager {
+         }
+ 
+         clearPifPropOverrides();
++        if (!mActivated) return;
+         killGmsFamily();
+         Log.i(TAG, "PIF config cleared, dropped staged PIF props");
+ 

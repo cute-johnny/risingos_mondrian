@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- RisingOS 17 (seventeen) local manifest for POCO F5 Pro / Redmi K60 (mondrian)
+     Maintainer: John (cute-johnny). Forks carry changes on branch "rising-mondrian". -->
+<manifest>
+  <remote name="gh" fetch="https://github.com/" />
+
+  <!-- Device trees (forks: TTahaKeles / crDroid) -->
+  <project path="device/xiaomi/mondrian" name="cute-johnny/android_device_xiaomi_mondrian" remote="gh" revision="rising-mondrian" />
+  <project path="device/xiaomi/sm8450-common" name="cute-johnny/android_device_xiaomi_sm8450-common" remote="gh" revision="rising-mondrian" />
+
+  <!-- Kernel (fork: TTahaKeles), KernelSU-Next pinned, modules + devicetrees unchanged -->
+  <project path="kernel/xiaomi/sm8450" name="cute-johnny/kernel_xiaomi_sm8450" remote="gh" revision="rising-mondrian" />
+  <project path="kernel/xiaomi/sm8450/KernelSU-Next" name="KernelSU-Next/KernelSU-Next" remote="gh" revision="4c706b5938665866ebe16944a481a7b91e3396af" />
+  <project path="kernel/xiaomi/sm8450-modules" name="TTahaKeles/kernel_xiaomi_sm8450-modules" remote="gh" revision="bka" />
+  <project path="kernel/xiaomi/sm8450-devicetrees" name="LineageOS/android_kernel_xiaomi_sm8450-devicetrees" remote="gh" revision="lineage-24.0" />
+
+  <!-- Proprietary vendor blobs (Xiaomi, extracted by TTahaKeles) -->
+  <project path="vendor/xiaomi/mondrian" name="TTahaKeles/proprietary_vendor_xiaomi_mondrian" remote="gh" revision="lineage-23.2" />
+  <project path="vendor/xiaomi/sm8450-common" name="TTahaKeles/proprietary_vendor_xiaomi_sm8450-common" remote="gh" revision="lineage-23.2" />
+
+  <!-- Hardware & MIUI camera -->
+  <project path="hardware/dolby" name="TTahaKeles/android_hardware_dolby" remote="gh" revision="LunarisDolby" />
+  <project path="device/xiaomi/miuicamera-mondrian" name="cute-johnny/device_xiaomi_miuicamera" remote="gh" revision="rising-mondrian" />
+  <project path="vendor/xiaomi/miuicamera-mondrian" name="TTahaKeles/vendor_xiaomi_miuicamera" remote="gh" revision="15-mondrian" />
+  <project path="hardware/xiaomi" name="LineageOS/android_hardware_xiaomi" remote="gh" revision="lineage-24.0" />
+
+  <!-- frameworks/base override (fork: RisingOS-Revived) -->
+  <remove-project path="frameworks/base" />
+  <project path="frameworks/base" name="cute-johnny/android_frameworks_base-new" remote="gh" revision="rising-mondrian" groups="pdk-cw-fs,pdk-fs,sysui-studio" />
+</manifest>
