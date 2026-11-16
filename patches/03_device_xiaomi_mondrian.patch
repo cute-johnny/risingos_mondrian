@@ -34,10 +34,10 @@ index 0000000..9d0f3c4
 +    </configList>
 +</MemoryLimiterConfig>
 diff --git a/device.mk b/device.mk
-index fb9a0d5..7c3d214 100644
+index fb9a0d5..b34428e 100644
 --- a/device.mk
 +++ b/device.mk
-@@ -58,3 +58,38 @@ DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += \
+@@ -58,3 +58,43 @@ DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += \
  # Call the MiuiCamera setup
  $(call inherit-product-if-exists, device/xiaomi/miuicamera-mondrian/device.mk)
  
@@ -76,6 +76,11 @@ index fb9a0d5..7c3d214 100644
 +# MemoryLimiter: per-app cgroup v2 memory.high / swap limits (per RAM tier)
 +PRODUCT_COPY_FILES += \
 +    $(LOCAL_PATH)/configs/memory-limiter-config.xml:$(TARGET_COPY_OUT_VENDOR)/etc/memory-limiter-config.xml
++
++# mmd: recompress idle/huge zram pages with zstd (kernel CONFIG_ZRAM_MULTI_COMP)
++PRODUCT_VENDOR_PROPERTIES += \
++    mmd.zram.recompression.enabled=true \
++    mmd.zram.recompression.algorithm=zstd
 diff --git a/lineage_mondrian.mk b/lineage_mondrian.mk
 index 040a1fb..9c1ea11 100644
 --- a/lineage_mondrian.mk

@@ -49,5 +49,6 @@ Generate your own signing keys into `vendor/lineage-priv/keys/` first. Keys are 
 - **[LineageOS](https://github.com/LineageOS)**: hardware/xiaomi, kernel devicetrees, the base of everything
 - **[RisingOS-Revived](https://github.com/RisingOS-Revived)**: the ROM
 - **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)**: root
+- **Sergey Senozhatsky** and the upstream zram contributors: the zram multi-compression/recompression patches (Linux 6.2), backported here to 5.10
 - **Xiaomi**: proprietary blobs and firmware
 - Everyone who contributed to the trees above (see each repo's commit history)

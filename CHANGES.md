@@ -17,6 +17,7 @@ Every modified repository on the VM is tracked in Git (`repo`), so the entire cu
 | **Issues + Step 1 (`06_issues_step1_build`)** | `RisingOS-9-261115-2250` (`rc=0`) | Fixed MiuiCamera `platform_app_36` SELinux crash, made RisingOS spoofer opt-in (`AxSpoofManager.java` + `persist.sys.spoof.auto_activate=false`), set UFS `nr_tags=31` + `ro.lmk.kill_timeout_ms=100`, cleaned upstream conflict markers in `product.prop` |
 | **Cgroup v2 / `nokmem` Fix (`07_nokmem_build`)** | **`RisingOS-9-261116-0018`** (`rc=0`) | Removed `cgroup_disable=pressure cgroup.memory=nokmem` via `CONFIG_CMDLINE` in `mondrian_GKI.config` and stripped legacy cgroup v1 `memory/bg/memory.swappiness` blocks from `init.qcom.rc` & `init.qti.kernel.rc` |
 | **Step 2 MemoryLimiter (`08_memlimiter_build`)** | **`RisingOS-9-261116-1850`** (`rc=0`) | Shipped `/vendor/etc/memory-limiter-config.xml` (per-app cgroup v2 limits for 8/12/16 GB SKUs, about 50% / 25% of RAM for visible / not-visible apps). `pmgd` intentionally left without a vendor config (idle) |
+| **Step 3A zram recompression (`09_zram_recomp`)** | fastboot test images (full ROM build pending) | Backported the Linux 6.2 zram multi-compression series (secondary `zstd` recompression of idle/huge pages) to 5.10, `CONFIG_ZRAM_MULTI_COMP=y`, and enabled `mmd.zram.recompression.*` props. Device test: zram `mem_used` 1697 → 1302 MB (−23%) after idle recompression, no regressions |
 
 ---
 
@@ -32,6 +33,7 @@ Every modified repository on the VM is tracked in Git (`repo`), so the entire cu
     - Added `CONFIG_CMDLINE="stack_depot_disable=on kasan.stacktrace=off kvm-arm.mode=protected"` (overrides `gki_defconfig` to remove `cgroup_disable=pressure` and `cgroup.memory=nokmem` so cgroup v2 PSI + kmem accounting stay active).
   - `drivers/Kconfig`: Added `source "drivers/kernelsu/Kconfig"`.
   - `drivers/Makefile`: Added `obj-$(CONFIG_KSU) += kernelsu/`.
+  - **zram multi-compression backport (Step 3A):** 17 upstream zram patches by Sergey Senozhatsky (and co-authors) from Linux 6.1/6.2: the multi-comp/recompression series plus prerequisites (huge_idle writeback, aged idle tracking, flag bits), `lib/cmdline: Export next_arg()`, a `[backport]` fix for 5.10 `zs_malloc()` returning 0 on failure (+`__GFP_CMA`), and `CONFIG_ZRAM_MULTI_COMP=y` in `mondrian_GKI.config`. Each patch is a separate commit that keeps upstream authorship.
 - **Untracked additions:**
   - `KernelSU-Next/` (cloned from `https://github.com/KernelSU-Next/KernelSU-Next` @ `4c706b59`)
   - `drivers/kernelsu` (symlink -> `../KernelSU-Next/kernel`)
@@ -54,6 +56,7 @@ Every modified repository on the VM is tracked in Git (`repo`), so the entire cu
   - `device.mk`:
     - Added `PRODUCT_VENDOR_PROPERTIES`: `mmd.zram.enabled=true`, `mmd.zram.comp_algorithm=lz4`, `mmd.zram.size=75%`, `mmd.zram.writeback.enabled=true`, `mmd.zram.writeback.device_size=1073741824`, `mmd.zram.writeback.min_free_space_mib=2048`, `mmd.zram.writeback.idle.enabled=true`, `mmd.zram.writeback.huge_idle.enabled=true`, `mmd.zram.writeback.use_nr_tags_prop=true`, `mmd.zram.writeback.nr_tags=31` (matching UFS 32-slot queue minus 1 reserved in `ufshcd.c` so `mmd_setup` avoids sysfs SELinux denials).
     - Added `PRODUCT_PRODUCT_PROPERTIES`: `ro.lmk.kill_heaviest_task=true`, `ro.lmk.psi_partial_stall_ms=100`, `ro.lmk.thrashing_limit=100`, `ro.lmk.swap_free_low_percentage=10`, `ro.lmk.kill_timeout_ms=100`, and `persist.sys.spoof.auto_activate=false` (makes built-in spoofer strictly opt-in so external `TEESimulator`/`AlwaysStrong` works).
+    - Added `PRODUCT_VENDOR_PROPERTIES`: `mmd.zram.recompression.enabled=true`, `mmd.zram.recompression.algorithm=zstd` (needs the kernel's `CONFIG_ZRAM_MULTI_COMP`; turn off with `setprop mmd.zram.recompression.enabled false` + reboot).
     - Added `PRODUCT_COPY_FILES` entry installing `configs/memory-limiter-config.xml` to `/vendor/etc/memory-limiter-config.xml`.
   - `configs/memory-limiter-config.xml` *(new)*: enables Android 17 `MemoryLimiter` (per-app cgroup v2 `memory.high` / `memory.swap.max`). Limits scale with RAM (about 50% of MemTotal for visible apps, 25% for not-visible apps, 25% swap each):
 
