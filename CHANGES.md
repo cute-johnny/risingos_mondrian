@@ -90,6 +90,10 @@ Every modified repository on the VM is tracked in Git (`repo`), so the entire cu
     - Honors `persist.sys.spoof.auto_activate=false` (`AUTO_ACTIVATE_PROP`) so built-in spoofing stays opt-in instead of auto-activating on first Settings launch.
     - Adds `migrateToOptIn()` (one-time cleanup clearing auto-fetched revoked keybox + PIF config on dirty flashes while preserving user-imported keyboxes).
     - Clears stale `persist.sys.pif.*` props cleanly and reacts live to `settings put secure spoof_activated 0|1` without needing a reboot.
+  - **Usage-aware lmkd protection** (`services/core/java/com/android/server/am/psc/FrequentAppTracker.java` new, `OomAdjuster.java`):
+    - Counts app uses (main process leaving TOP, 60 s debounce) as a decaying score (half-life 3 days), persisted in `/data/system/frequent_apps.txt`.
+    - The main processes of the top N apps (`persist.sys.lmk.protect_frequent`, default `5`, `0` = off, min score 2) get `oom_score_adj` 900 exclusively; all other cached processes are kept at ≥ 901, so lmkd kills them first. Protected apps stay cached (still frozen/compacted).
+    - Why: exit-info on build 2342 showed lmkd killing frequently used apps (Immich, Telegram, Proton Mail, Threads, YouTube) purely by LRU position. Log tag `FrequentApps` prints the protected set when it changes.
 
 ### E2. Kernel Devicetrees — `kernel/xiaomi/sm8450-devicetrees`
 - **Upstream base:** `https://github.com/LineageOS/android_kernel_xiaomi_sm8450-devicetrees` @ `2e649a7f` (`lineage-24.0`)
