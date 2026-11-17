@@ -91,6 +91,13 @@ Every modified repository on the VM is tracked in Git (`repo`), so the entire cu
     - Adds `migrateToOptIn()` (one-time cleanup clearing auto-fetched revoked keybox + PIF config on dirty flashes while preserving user-imported keyboxes).
     - Clears stale `persist.sys.pif.*` props cleanly and reacts live to `settings put secure spoof_activated 0|1` without needing a reboot.
 
+### E2. Kernel Devicetrees — `kernel/xiaomi/sm8450-devicetrees`
+- **Upstream base:** `https://github.com/LineageOS/android_kernel_xiaomi_sm8450-devicetrees` @ `2e649a7f` (`lineage-24.0`)
+- **Fork:** `cute-johnny/android_kernel_xiaomi_sm8450-devicetrees` branch `rising-mondrian` (commit `c0f46506`; the manifest now points here)
+- **Patch:** [`patches/06_kernel_xiaomi_sm8450-devicetrees.patch`](patches/06_kernel_xiaomi_sm8450-devicetrees.patch)
+- **Tracked edits:**
+  - `qcom/cape.dtsi`: removed `cgroup.memory=nokmem,nosocket` from `/chosen/bootargs`. This was the real source of those flags in `/proc/cmdline` (the bootloader merges the DTB bootargs); `CONFIG_CMDLINE` alone did not remove them. Shipped since build `RisingOS-9-261116-0018` (`07_nokmem_build`), but committed to a fork only on 2026-11-17.
+
 ### F. Build Side-Effect / Private Keys (Do Not Push to Public Forks)
 - `vendor/official_devices/OTA/device/GAPPS/mondrian.json` (not published): Automatically overwritten during `bacon` OTA JSON generation.
 - `vendor/lineage-priv/keys/`: Generated private release keys (`releasekey.pk8`, `platform.pk8`, `keys.mk`, backed up as `~/rising-keys-backup.tar.gz`) — keep **private**.
