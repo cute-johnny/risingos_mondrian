@@ -50,5 +50,6 @@ Generate your own signing keys into `vendor/lineage-priv/keys/` first. Keys are 
 - **[RisingOS-Revived](https://github.com/RisingOS-Revived)**: the ROM
 - **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)**: root
 - **Sergey Senozhatsky** and the upstream zram contributors: the zram multi-compression/recompression patches (Linux 6.2), backported here to 5.10
+- **Yu Zhao** (Multi-Gen LRU) and the **Android Common Kernel** team (Kalesh Singh et al., `android13-5.10`): the MGLRU series and Android fixes, cherry-picked into this 5.10 kernel
 - **Xiaomi**: proprietary blobs and firmware
 - Everyone who contributed to the trees above (see each repo's commit history)
