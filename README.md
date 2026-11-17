@@ -24,6 +24,7 @@ See [CHANGES.md](CHANGES.md) for every change. The raw diffs are in [patches/](p
 | kernel/xiaomi/sm8450 | [cute-johnny/kernel_xiaomi_sm8450](https://github.com/cute-johnny/kernel_xiaomi_sm8450/tree/rising-mondrian) | TTahaKeles `bka` |
 | device/xiaomi/miuicamera-mondrian | [cute-johnny/device_xiaomi_miuicamera](https://github.com/cute-johnny/device_xiaomi_miuicamera/tree/rising-mondrian) | TTahaKeles `15-mondrian` |
 | frameworks/base | [cute-johnny/android_frameworks_base-new](https://github.com/cute-johnny/android_frameworks_base-new/tree/rising-mondrian) | RisingOS-Revived `seventeen` |
+| vendor/xiaomi/sm8450-common | [cute-johnny/proprietary_vendor_xiaomi_sm8450-common](https://github.com/cute-johnny/proprietary_vendor_xiaomi_sm8450-common/tree/rising-mondrian) | TTahaKeles `lineage-23.2` |
 
 Unchanged repos (kernel modules, devicetrees, vendor blobs, Dolby, MIUI camera vendor, hardware/xiaomi) are used directly from upstream. See [local_manifests/mondrian.xml](local_manifests/mondrian.xml).
 

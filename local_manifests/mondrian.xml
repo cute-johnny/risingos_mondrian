@@ -16,7 +16,7 @@
 
   <!-- Proprietary vendor blobs (Xiaomi, extracted by TTahaKeles) -->
   <project path="vendor/xiaomi/mondrian" name="TTahaKeles/proprietary_vendor_xiaomi_mondrian" remote="gh" revision="lineage-23.2" />
-  <project path="vendor/xiaomi/sm8450-common" name="TTahaKeles/proprietary_vendor_xiaomi_sm8450-common" remote="gh" revision="lineage-23.2" />
+  <project path="vendor/xiaomi/sm8450-common" name="cute-johnny/proprietary_vendor_xiaomi_sm8450-common" remote="gh" revision="rising-mondrian" />
 
   <!-- Hardware & MIUI camera -->
   <project path="hardware/dolby" name="TTahaKeles/android_hardware_dolby" remote="gh" revision="LunarisDolby" />

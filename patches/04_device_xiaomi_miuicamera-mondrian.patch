@@ -1,4 +1,36 @@
-﻿diff --git a/sepolicy/vendor/hal_camera_default.te b/sepolicy/vendor/hal_camera_default.te
+diff --git a/configs/preferred-apps-miuicamera.xml b/configs/preferred-apps-miuicamera.xml
+new file mode 100644
+index 0000000..4a13fa0
+--- /dev/null
++++ b/configs/preferred-apps-miuicamera.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Default handler for the lock-screen camera intent. MiuiCamera declares
++     STILL_IMAGE_CAMERA_SECURE on both .Camera and .AssistantCamera; without a
++     preference SystemUI gets the chooser and takes the dismiss-keyguard path. -->
++<preferred-activities>
++    <item name="com.android.camera/.Camera" match="100000" always="true" set="2">
++        <set name="com.android.camera/.Camera" />
++        <set name="com.android.camera/.AssistantCamera" />
++        <filter>
++            <action name="android.media.action.STILL_IMAGE_CAMERA_SECURE" />
++            <cat name="android.intent.category.DEFAULT" />
++        </filter>
++    </item>
++</preferred-activities>
+diff --git a/device.mk b/device.mk
+index 05aac5b..81d19ea 100644
+--- a/device.mk
++++ b/device.mk
+@@ -22,3 +22,7 @@ PRODUCT_SOONG_NAMESPACES += \
+ # Sysconfig
+ PRODUCT_COPY_FILES += \
+     $(LOCAL_PATH)/configs/miuicamera-hiddenapi-package-allowlist.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/sysconfig/miuicamera-hiddenapi-package-allowlist.xml
++
++# Lock-screen camera: MiuiCamera .Camera is the default STILL_IMAGE_CAMERA_SECURE handler
++PRODUCT_COPY_FILES += \
++    $(LOCAL_PATH)/configs/preferred-apps-miuicamera.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/preferred-apps/miuicamera.xml
+diff --git a/sepolicy/vendor/hal_camera_default.te b/sepolicy/vendor/hal_camera_default.te
 index f1c5be9..8c71431 100644
 --- a/sepolicy/vendor/hal_camera_default.te
 +++ b/sepolicy/vendor/hal_camera_default.te

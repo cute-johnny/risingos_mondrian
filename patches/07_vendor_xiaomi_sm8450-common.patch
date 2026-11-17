@@ -1,0 +1,9 @@
+diff --git a/proprietary/system_ext/etc/seccomp_policy/tcmd.policy b/proprietary/system_ext/etc/seccomp_policy/tcmd.policy
+index cf4d9db..16ac245 100644
+--- a/proprietary/system_ext/etc/seccomp_policy/tcmd.policy
++++ b/proprietary/system_ext/etc/seccomp_policy/tcmd.policy
+@@ -71,3 +71,4 @@ gettimeofday: 1
+ gettid: 1
+ rt_tgsigqueueinfo: 1
+ nanosleep: 1
++lseek: 1

@@ -8,10 +8,10 @@ index 72378676d52e..02dd6989b1d2 100644
  sphinx_*/
 +/KernelSU-Next/
 diff --git a/arch/arm64/configs/vendor/mondrian_GKI.config b/arch/arm64/configs/vendor/mondrian_GKI.config
-index 65330279f42f..6dc96ffe3414 100644
+index 65330279f42f..4cda2237834e 100644
 --- a/arch/arm64/configs/vendor/mondrian_GKI.config
 +++ b/arch/arm64/configs/vendor/mondrian_GKI.config
-@@ -12,3 +12,19 @@ CONFIG_WIRELESS_REVERSE_CLOSE=y
+@@ -12,3 +12,31 @@ CONFIG_WIRELESS_REVERSE_CLOSE=y
  
  # uh yes 
  CONFIG_LOCALVERSION="-Weil+"
@@ -31,6 +31,18 @@ index 65330279f42f..6dc96ffe3414 100644
 +# Multi-Gen LRU (MGLRU) backport from android13-5.10 (enabled at boot; min_ttl_ms left at 0)
 +CONFIG_LRU_GEN=y
 +CONFIG_LRU_GEN_ENABLED=y
++
++# Kernel BTF (lets the bpfloader load timeInState etc. so batterystats gets per-app CPU power)
++CONFIG_DEBUG_INFO_BTF=y
++
++# TCP BBR congestion control, used by default (BBR needs TCP_CONG_ADVANCED;
++# keep the other algorithms out so no new .ko modules appear)
++CONFIG_TCP_CONG_ADVANCED=y
++# CONFIG_TCP_CONG_BIC is not set
++# CONFIG_TCP_CONG_WESTWOOD is not set
++# CONFIG_TCP_CONG_HTCP is not set
++CONFIG_TCP_CONG_BBR=y
++CONFIG_DEFAULT_BBR=y
 diff --git a/arch/arm64/include/asm/pgtable.h b/arch/arm64/include/asm/pgtable.h
 index e1b89bf093f4..677521814b5d 100644
 --- a/arch/arm64/include/asm/pgtable.h
