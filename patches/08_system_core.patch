@@ -1,0 +1,25 @@
+diff --git a/rootdir/init.rc b/rootdir/init.rc
+index cb77e0a..bbae2ea 100644
+--- a/rootdir/init.rc
++++ b/rootdir/init.rc
+@@ -1209,11 +1209,16 @@ on boot
+     # parameters to match how it is managing things.
+     write /proc/sys/vm/overcommit_memory 1
+     write /proc/sys/vm/min_free_order_shift 4
+-
+-    # System server manages zram writeback
+-    chown root system /sys/block/zram0/idle
++    write /proc/sys/vm/watermark_scale_factor 50
++    write /proc/sys/vm/dirty_background_ratio 3
++    write /proc/sys/vm/dirty_ratio 15
++    write /proc/sys/vm/dirty_expire_centisecs 500
++    write /proc/sys/vm/dirty_writeback_centisecs 300
++
++    # mmd manages zram writeback
++    chown root mmd /sys/block/zram0/idle
+     chmod 0220 /sys/block/zram0/idle
+-    chown root system /sys/block/zram0/writeback
++    chown root mmd /sys/block/zram0/writeback
+     chmod 0220 /sys/block/zram0/writeback
+ 
+     # to access F2FS sysfs on dm-<num> directly

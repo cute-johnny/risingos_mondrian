@@ -1,4 +1,4 @@
-﻿diff --git a/properties/product.prop b/properties/product.prop
+diff --git a/properties/product.prop b/properties/product.prop
 index c7b0b25..87fbf17 100644
 --- a/properties/product.prop
 +++ b/properties/product.prop
@@ -24,11 +24,57 @@ index c7b0b25..87fbf17 100644
 -
 -=======
 ->>>>>>> c215955 (sm8450-common: Move Bluetooth profile property to system_ext)
+diff --git a/properties/vendor.prop b/properties/vendor.prop
+index c0458ed..06e801a 100644
+--- a/properties/vendor.prop
++++ b/properties/vendor.prop
+@@ -220,12 +220,7 @@ debug.stagefright.c2inputsurface=-1
+ 
+ # Perf
+ ro.vendor.extension_library=libqti-perfd-client.so
+-<<<<<<< HEAD
+-vendor.pasr.activemode.enabled=false
+-vendor.pasr.enabled=false
+ vendor.perf.framepacing.enable=1
+-=======
+->>>>>>> 6a5f97d (sm8450-common: Remove PASR leftovers)
+ 
+ # Radio
+ persist.dbg.volte_avail_ovr=1
+diff --git a/rootdir/bin/init.kernel.post_boot-cape.sh b/rootdir/bin/init.kernel.post_boot-cape.sh
+index e25168f..f6a09f4 100644
+--- a/rootdir/bin/init.kernel.post_boot-cape.sh
++++ b/rootdir/bin/init.kernel.post_boot-cape.sh
+@@ -55,6 +55,8 @@ echo 15 15 15 15 15 15 15 15 > /proc/sys/walt/sched_util_busy_hyst_cpu_util
+ echo 325 > /proc/sys/walt/walt_low_latency_task_threshold
+ 
+ # cpuset parameters
++echo 0-6 > /dev/cpuset/foreground/cpus
++echo 0-3 > /dev/cpuset/restricted/cpus
+ echo 0-3 > /dev/cpuset/background/cpus
+ echo 0-3 > /dev/cpuset/system-background/cpus
+ 
 diff --git a/rootdir/bin/init.kernel.post_boot.sh b/rootdir/bin/init.kernel.post_boot.sh
-index a3bbcd4..83dd213 100644
+index a3bbcd4..11038d5 100644
 --- a/rootdir/bin/init.kernel.post_boot.sh
 +++ b/rootdir/bin/init.kernel.post_boot.sh
-@@ -127,9 +127,9 @@ function configure_memory_parameters() {
+@@ -86,13 +86,8 @@ function configure_read_ahead_kb_values() {
+ 	# /sys/block/dm-0/queue/read_ahead_kb to /sys/block/dm-10/queue/read_ahead_kb
+ 	# /sys/block/sda/queue/read_ahead_kb to /sys/block/sdh/queue/read_ahead_kb
+ 
+-	# Set 128 for <= 4GB &
+-	# set 512 for >= 5GB targets.
+-	if [ $MemTotal -le 4194304 ]; then
+-		ra_kb=128
+-	else
+-		ra_kb=512
+-	fi
++	# Keep 128 KiB read-ahead on UFS 3.1 to avoid 4x read amplification under reclaim
++	ra_kb=128
+ 	if [ -f /sys/block/mmcblk0/bdi/read_ahead_kb ]; then
+ 		echo $ra_kb > /sys/block/mmcblk0/bdi/read_ahead_kb
+ 	fi
+@@ -127,9 +122,10 @@ function configure_memory_parameters() {
  	# Set allocstall_threshold to 0 for all targets.
  	#
  
@@ -36,12 +82,13 @@ index a3bbcd4..83dd213 100644
 +	# ZRAM is configured by Android 17 mmd (mmd.zram.enabled=true)
  	configure_read_ahead_kb_values
 -	echo 100 > /proc/sys/vm/swappiness
-+	echo 120 > /proc/sys/vm/swappiness
++	echo 80 > /proc/sys/vm/swappiness
++	echo 15 > /proc/sys/vm/dirty_ratio
  
  	# Disable periodic kcompactd wakeups. We do not use THP, so having many
  	# huge pages is not as necessary.
 diff --git a/rootdir/etc/init.qcom.rc b/rootdir/etc/init.qcom.rc
-index 08393c5..8d053a2 100644
+index 08393c5..73e1554 100644
 --- a/rootdir/etc/init.qcom.rc
 +++ b/rootdir/etc/init.qcom.rc
 @@ -59,12 +59,6 @@ on init
@@ -57,8 +104,21 @@ index 08393c5..8d053a2 100644
  
  on post-fs
  
+@@ -453,9 +447,9 @@ on property:sys.boot_completed=1
+     write /sys/bus/platform/devices/1d84000.ufshc/auto_hibern8 5000
+     #Enable UFS clock gating back
+     write /sys/bus/platform/devices/1d84000.ufshc/clkgate_enable 1
+-    #Reset read ahead for dm-0 and dm-1 to 512kb
+-    write /sys/block/dm-0/queue/read_ahead_kb 512
+-    write /sys/block/dm-1/queue/read_ahead_kb 512
++    #Reset read ahead for dm-0 and dm-1 to 128kb
++    write /sys/block/dm-0/queue/read_ahead_kb 128
++    write /sys/block/dm-1/queue/read_ahead_kb 128
+     #WDSP FW boot sysfs node used by STHAL
+     chown media audio /sys/kernel/wdsp0/boot
+     chown media audio /sys/kernel/wcd_cpe0/fw_name
 diff --git a/rootdir/etc/init.qti.kernel.rc b/rootdir/etc/init.qti.kernel.rc
-index 15de3a8..8b69cf1 100644
+index 15de3a8..7323c53 100644
 --- a/rootdir/etc/init.qti.kernel.rc
 +++ b/rootdir/etc/init.qti.kernel.rc
 @@ -49,12 +49,6 @@ on early-init
@@ -74,3 +134,149 @@ index 15de3a8..8b69cf1 100644
  
      # update scheduler tunables
      write /dev/cpuctl/foreground/cpu.uclamp.sched_boost_no_override 1
+@@ -88,29 +82,17 @@ on boot
+     chown root system /sys/kernel/dload/dload_mode
+     chmod 0660 /sys/kernel/dload/dload_mode
+ 
+-    # set the io-scheduler to bfq on all mq support devices
+-    write /sys/block/sda/queue/scheduler bfq
+-    write /sys/block/sdb/queue/scheduler bfq
+-    write /sys/block/sdc/queue/scheduler bfq
+-    write /sys/block/sdd/queue/scheduler bfq
+-    write /sys/block/sde/queue/scheduler bfq
+-    write /sys/block/sdf/queue/scheduler bfq
+-    write /sys/block/sdg/queue/scheduler bfq
+-    write /sys/block/sdh/queue/scheduler bfq
+-    write /sys/class/block/mmcblk0/queue/scheduler bfq
+-    write /sys/class/block/mmcblk1/queue/scheduler bfq
+-
+-    # update io-scheduler tunables
+-    write /sys/block/sda/queue/iosched/slice_idle 0
+-    write /sys/block/sdb/queue/iosched/slice_idle 0
+-    write /sys/block/sdc/queue/iosched/slice_idle 0
+-    write /sys/block/sdd/queue/iosched/slice_idle 0
+-    write /sys/block/sde/queue/iosched/slice_idle 0
+-    write /sys/block/sdf/queue/iosched/slice_idle 0
+-    write /sys/block/sdg/queue/iosched/slice_idle 0
+-    write /sys/block/sdh/queue/iosched/slice_idle 0
+-    write /sys/class/block/mmcblk0/queue/iosched/slice_idle 0
+-    write /sys/class/block/mmcblk1/queue/iosched/slice_idle 0
++    # set the io-scheduler to mq-deadline on all mq support devices
++    write /sys/block/sda/queue/scheduler mq-deadline
++    write /sys/block/sdb/queue/scheduler mq-deadline
++    write /sys/block/sdc/queue/scheduler mq-deadline
++    write /sys/block/sdd/queue/scheduler mq-deadline
++    write /sys/block/sde/queue/scheduler mq-deadline
++    write /sys/block/sdf/queue/scheduler mq-deadline
++    write /sys/block/sdg/queue/scheduler mq-deadline
++    write /sys/block/sdh/queue/scheduler mq-deadline
++    write /sys/class/block/mmcblk0/queue/scheduler mq-deadline
++    write /sys/class/block/mmcblk1/queue/scheduler mq-deadline
+ 
+     # Allow access to memory hotplug device attributes
+     chown system system /sys/kernel/mem-offline/anon_migrate
+@@ -159,11 +141,42 @@ service kernel-post-boot /vendor/bin/sh /vendor/bin/init.kernel.post_boot.sh
+ 
+ on property:sys.boot_completed=1
+     write /dev/kmsg "Boot completed "
+-    #Reset read ahead for dm-0, dm-1 and dm-2 to 512kb
+-    write /sys/block/dm-0/queue/read_ahead_kb 512
+-    write /sys/block/dm-1/queue/read_ahead_kb 512
+-    write /sys/block/dm-2/queue/read_ahead_kb 512
++    #Reset read ahead for dm-0, dm-1 and dm-2 to 128kb
++    write /sys/block/dm-0/queue/read_ahead_kb 128
++    write /sys/block/dm-1/queue/read_ahead_kb 128
++    write /sys/block/dm-2/queue/read_ahead_kb 128
+     write /proc/sys/vm/page-cluster 0
++
++    # MGLRU: protect working-set pages accessed within 1s from premature reclaim
++    write /sys/kernel/mm/lru_gen/min_ttl_ms 1000
++
++    # uclamp tuning for SM8450 (4x A510 + 3x A710 + 1x X2)
++    write /dev/cpuctl/top-app/cpu.uclamp.min 10
++    write /dev/cpuctl/top-app/cpu.uclamp.max max
++    write /dev/cpuctl/top-app/cpu.uclamp.latency_sensitive 1
++    write /dev/cpuctl/foreground_window/cpu.uclamp.min 5
++    write /dev/cpuctl/foreground_window/cpu.uclamp.max max
++    write /dev/cpuctl/foreground_window/cpu.uclamp.latency_sensitive 1
++    write /dev/cpuctl/foreground/cpu.uclamp.min 0
++    write /dev/cpuctl/foreground/cpu.uclamp.max 80
++    write /dev/cpuctl/foreground/cpu.uclamp.latency_sensitive 0
++    write /dev/cpuctl/camera-daemon/cpu.uclamp.min 15
++    write /dev/cpuctl/camera-daemon/cpu.uclamp.max max
++    write /dev/cpuctl/camera-daemon/cpu.uclamp.latency_sensitive 1
++    write /dev/cpuctl/background/cpu.uclamp.min 0
++    write /dev/cpuctl/background/cpu.uclamp.max 40
++    write /dev/cpuctl/background/cpu.uclamp.latency_sensitive 0
++    write /dev/cpuctl/system-background/cpu.uclamp.min 0
++    write /dev/cpuctl/system-background/cpu.uclamp.max 50
++    write /dev/cpuctl/system-background/cpu.uclamp.latency_sensitive 0
++    write /dev/cpuctl/dex2oat/cpu.uclamp.min 0
++    write /dev/cpuctl/dex2oat/cpu.uclamp.max 60
++    write /dev/cpuctl/dex2oat/cpu.uclamp.latency_sensitive 0
++
++    # cpuset isolation: keep Prime core 7 reserved for top-app and camera-daemon
++    write /dev/cpuset/foreground/cpus 0-6
++    write /dev/cpuset/restricted/cpus 0-3
++
+     start kernel-boot
+     start kernel-post-boot
+ 
+diff --git a/rootdir/etc/init.xiaomi_sm8450.rc b/rootdir/etc/init.xiaomi_sm8450.rc
+index 2956c04..3523e2a 100644
+--- a/rootdir/etc/init.xiaomi_sm8450.rc
++++ b/rootdir/etc/init.xiaomi_sm8450.rc
+@@ -116,8 +116,8 @@ on post-fs-data
+     mkdir /mnt/vendor/persist/goodix 0770 system system
+ 
+ on property:sys.boot_completed=1
+-    # Set thermal mode to mgame
+-    write /sys/devices/virtual/thermal/thermal_message/sconfig 20
++    # Set thermal mode to normal (avoid forcing aggressive mgame profile 24/7)
++    write /sys/devices/virtual/thermal/thermal_message/sconfig 0
+ 
+ on property:persist.sys.xtra-daemon.enabled=*
+     restart loc_launcher
+diff --git a/wlan/WCNSS_qcom_cfg_qca6490.ini b/wlan/WCNSS_qcom_cfg_qca6490.ini
+index 059247c..9a976dd 100644
+--- a/wlan/WCNSS_qcom_cfg_qca6490.ini
++++ b/wlan/WCNSS_qcom_cfg_qca6490.ini
+@@ -19,7 +19,6 @@ gChannelBondingMode5GHz=1
+ gAllowDFSChannelRoam=1
+ gSetTxChainmask1x1=1
+ gSetRxChainmask1x1=1
+-gActiveMaxChannelTime=40
+ gWlanMccToSccSwitchMode = 3
+ gEnableTXSTBC=1
+ gEnableTxBFeeSAP=1
+@@ -74,7 +73,7 @@ gWmiCreditCount=1
+ acs_with_more_param=1
+ AutoChannelSelectWeight=0x00fafafa
+ gRuntimePM=2
+-gRuntimePMDelay=500
++gRuntimePMDelay=250
+ gEnablePacketLog=0
+ oem_6g_support_disable=0
+ gSoftApMaxPeers=10
+@@ -91,6 +90,21 @@ gtsf_ptp_options=0xb
+ # enable Self Recovery
+ gEnableSelfRecovery=1
+ 
++# Power Save / Suspend / Wakeup Reduction (verified in qcacld-3.0)
++gEnableImps=1
++gEnableBmps=1
++gOptimizedPowerManagement=1
++gActiveModeOffload=1
++gBpfFilterEnable=1
++gHwFilterMode=3
++ssdp=0
++gRArateLimitInterval=600
++gEnableModulatedDTIM=3
++enable_mod_dtim_on_system_suspend=1
++rx_wakelock_timeout=20
++hostArpOffload=1
++hostNSOffload=1
++
+ END
+ 
+ # Note: Configuration parser would not read anything past the END marker

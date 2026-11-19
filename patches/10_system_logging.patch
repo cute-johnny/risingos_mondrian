@@ -1,0 +1,89 @@
+diff --git a/logd/LogSize.cpp b/logd/LogSize.cpp
+index 22ad6aa..55a7dd9 100644
+--- a/logd/LogSize.cpp
++++ b/logd/LogSize.cpp
+@@ -62,37 +62,13 @@ static std::optional<size_t> GetBufferSizePropertyOverride(log_id_t log_id) {
+     return {};
+ }
+ 
+-/* This method should only be used for debuggable devices. */
+-static bool isAllowedToOverrideBufferSize() {
+-    const auto hwType = android::base::GetProperty("ro.hardware.type", "");
+-    const auto hardware = android::base::GetProperty("ro.hardware", "");
+-    /* Allow automotive and desktop devices to optionally override the default. */
+-    return (hwType == "automotive" || hardware == "android-desktop");
+-}
+-
+ size_t GetBufferSizeFromProperties(log_id_t log_id) {
+-    /*
+-     * http://b/196856709
+-     *
+-     * We've been seeing timeouts from logcat in bugreports for years, but the
+-     * rate has gone way up lately. The suspicion is that this is because we
+-     * have a lot of dogfooders who still have custom (large) log sizes but
+-     * the new compressed logging is cramming way more in. The bugreports I've seen
+-     * have had 1,000,000+ lines, so taking 10s to collect that much logging seems
+-     * plausible. Of course, it's also possible that logcat is timing out because
+-     * the log is being *spammed* as it's being read. But temporarily disabling
+-     * custom log sizes like this should help us confirm (or deny) whether the
+-     * problem really is this simple.
+-     */
++    if (auto size = GetBufferSizePropertyOverride(log_id)) {
++        return *size;
++    }
++
+     static const bool isDebuggable = android::base::GetBoolProperty("ro.debuggable", false);
+-    if (isDebuggable) {
+-        static const bool mayOverride = isAllowedToOverrideBufferSize();
+-        if (mayOverride) {
+-            if (auto size = GetBufferSizePropertyOverride(log_id)) {
+-                return *size;
+-            }
+-        }
+-    } else {
++    if (!isDebuggable) {
+         static const bool isLowRam = android::base::GetBoolProperty("ro.config.low_ram", false);
+         /*
+          * For non-debuggable low_ram devices, we want to save memory here and
+diff --git a/logd/logd_test.cpp b/logd/logd_test.cpp
+index fae2b9d..d2dec8d 100644
+--- a/logd/logd_test.cpp
++++ b/logd/logd_test.cpp
+@@ -30,6 +30,7 @@
+ 
+ #include <android-base/file.h>
+ #include <android-base/macros.h>
++#include <android-base/properties.h>
+ #include <android-base/stringprintf.h>
+ #include <android-base/unique_fd.h>
+ #include <cutils/sockets.h>
+@@ -42,6 +43,7 @@
+ #include <selinux/selinux.h>
+ #endif
+ 
++#include "LogSize.h"
+ #include "LogUtils.h"  // For LOGD_SNDTIMEO.
+ 
+ using android::base::unique_fd;
+@@ -645,3 +647,21 @@ TEST(logd, test_pmsg_active) {
+     GTEST_LOG_(INFO) << "This test does nothing.\n";
+ #endif
+ }
++
++#ifndef __ANDROID__
++TEST(logd, get_buffer_size_from_properties_honors_overrides) {
++    EXPECT_EQ(kDefaultLogBufferSize, GetBufferSizeFromProperties(LOG_ID_MAIN));
++
++    ASSERT_TRUE(android::base::SetProperty("ro.debuggable", "0"));
++    ASSERT_TRUE(android::base::SetProperty("ro.hardware", "qcom"));
++    ASSERT_TRUE(android::base::SetProperty("ro.logd.size", "8M"));
++    ASSERT_TRUE(android::base::SetProperty("ro.logd.size.stats", "64K"));
++
++    EXPECT_EQ(8u * 1024 * 1024, GetBufferSizeFromProperties(LOG_ID_MAIN));
++    EXPECT_EQ(64u * 1024, GetBufferSizeFromProperties(LOG_ID_STATS));
++
++    ASSERT_TRUE(android::base::SetProperty("persist.logd.size", "4M"));
++    EXPECT_EQ(4u * 1024 * 1024, GetBufferSizeFromProperties(LOG_ID_MAIN));
++    ASSERT_TRUE(android::base::SetProperty("persist.logd.size", ""));
++}
++#endif

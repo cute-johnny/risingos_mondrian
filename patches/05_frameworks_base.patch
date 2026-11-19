@@ -1,3 +1,53 @@
+diff --git a/core/java/android/app/ActivityManagerInternal.java b/core/java/android/app/ActivityManagerInternal.java
+index 83077ffe7..0dc709c07 100644
+--- a/core/java/android/app/ActivityManagerInternal.java
++++ b/core/java/android/app/ActivityManagerInternal.java
+@@ -1476,4 +1476,18 @@ public abstract class ActivityManagerInternal {
+      * @param clientUid the UID that has a bound client
+      */
+     public abstract boolean hasServiceBindingOrProviderUse(int uid, int clientUid);
++
++    /**
++     * Notifies ActivityManager that a UID has started or stopped holding an active camera device.
++     *
++     * @hide
++     */
++    public void noteCameraStateChanged(int uid, boolean active) {}
++
++    /**
++     * Notifies ActivityManager that all tracked camera device states were reset.
++     *
++     * @hide
++     */
++    public void noteCameraReset() {}
+ }
+diff --git a/packages/SystemUI/src/com/android/systemui/ArcaneIdleManager.java b/packages/SystemUI/src/com/android/systemui/ArcaneIdleManager.java
+index 70728f079..09b13e483 100644
+--- a/packages/SystemUI/src/com/android/systemui/ArcaneIdleManager.java
++++ b/packages/SystemUI/src/com/android/systemui/ArcaneIdleManager.java
+@@ -78,16 +78,17 @@ public class ArcaneIdleManager {
+         String TAG_SUBCLASS = "executeManager ";
+         RunningServices = localActivityManager.getRunningAppProcesses();
+ 
+-        if (IDLE_TIME_NEEDED > msTillAlarm(imContext) && msTillAlarm(imContext) != 0) {
++        final long tillAlarm = msTillAlarm(imContext);
++        if (tillAlarm > 0 && IDLE_TIME_NEEDED > tillAlarm) {
+             IdleManLog(TAG_SUBCLASS + LOG_MSGS[1]);
+-            h.postDelayed(rStateTwo,100);
++            h.postDelayed(rStateTwo, 100);
+         } else {
+             IdleManLog(TAG_SUBCLASS + LOG_MSGS[2]);
+-            h.postDelayed(rStateTwo,IDLE_TIME_NEEDED /*1hr*/);
++            h.postDelayed(rStateTwo, IDLE_TIME_NEEDED /*1hr*/);
+         }
+-        if (msTillAlarm(imContext) != 0) {
++        if (tillAlarm > 0) {
+             IdleManLog(TAG_SUBCLASS + LOG_MSGS[3]);
+-            h.postDelayed(rStateThree,(msTillAlarm(imContext) - 900000));
++            h.postDelayed(rStateThree, Math.max(0L, tillAlarm - 900000));
+         }
+     }
+ 
 diff --git a/packages/SystemUI/src/com/android/systemui/notetask/quickaffordance/NoteTaskQuickAffordanceConfig.kt b/packages/SystemUI/src/com/android/systemui/notetask/quickaffordance/NoteTaskQuickAffordanceConfig.kt
 index 130e48ceb..a27c4e977 100644
 --- a/packages/SystemUI/src/com/android/systemui/notetask/quickaffordance/NoteTaskQuickAffordanceConfig.kt
@@ -19,8 +69,43 @@ index 130e48ceb..a27c4e977 100644
              ) != null
  }
  
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/CentralSurfacesImpl.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/CentralSurfacesImpl.java
+index 74f5bad38..e3854aefe 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/CentralSurfacesImpl.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/CentralSurfacesImpl.java
+@@ -2477,7 +2477,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
+ 
+             DejankUtils.stopDetectingBlockingIpcs(tag);
+             if (Settings.System.getIntForUser(mContext.getContentResolver(),
+-                                              Settings.System.ARCANE_IDLE_MANAGER, 1,
++                                              Settings.System.ARCANE_IDLE_MANAGER, 0,
+                                               mLockscreenUserManager.getCurrentUserId()) == 1) {
+                 if (!isIdleManagerIstantiated) {
+                     ArcaneIdleManager.initManager(mContext);
+@@ -2511,7 +2511,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces,
+             });
+             DejankUtils.stopDetectingBlockingIpcs(tag);
+             if (Settings.System.getIntForUser(mContext.getContentResolver(),
+-                                              Settings.System.ARCANE_IDLE_MANAGER, 1,
++                                              Settings.System.ARCANE_IDLE_MANAGER, 0,
+                                               mLockscreenUserManager.getCurrentUserId()) == 1) {
+                 ArcaneIdleManager.haltManager();
+             }
+diff --git a/packages/SystemUI/src/com/android/systemui/util/MemoryUtils.kt b/packages/SystemUI/src/com/android/systemui/util/MemoryUtils.kt
+index c3972f0af..3f47154b6 100644
+--- a/packages/SystemUI/src/com/android/systemui/util/MemoryUtils.kt
++++ b/packages/SystemUI/src/com/android/systemui/util/MemoryUtils.kt
+@@ -24,7 +24,7 @@ object MemoryUtils {
+     @JvmStatic
+     fun releaseMemory() {
+         try {
+-            ActivityManager.getService().releaseMemory(500, 60, false, false)
++            ActivityManager.getService().releaseMemory(900, 60, false, true)
+             Log.d(TAG, "Memory release triggered successfully")
+         } catch (e: Exception) {
+             Log.e(TAG, "Failed to release memory", e)
 diff --git a/services/core/java/com/android/server/am/ActivityManagerService.java b/services/core/java/com/android/server/am/ActivityManagerService.java
-index 6441ac8e8..8f324ebf8 100644
+index 6441ac8e8..0107d4ebf 100644
 --- a/services/core/java/com/android/server/am/ActivityManagerService.java
 +++ b/services/core/java/com/android/server/am/ActivityManagerService.java
 @@ -9715,6 +9715,7 @@ public class ActivityManagerService extends IActivityManager.Stub
@@ -31,12 +116,213 @@ index 6441ac8e8..8f324ebf8 100644
              mSystemReady = true;
              t.traceEnd();
          }
+@@ -18292,6 +18293,25 @@ public class ActivityManagerService extends IActivityManager.Stub
+                     mAtmInternal.getActivityName(token));
+         }
+ 
++        @Override
++        public void noteCameraStateChanged(int uid, boolean active) {
++            if (mCachedAppOptimizer == null) {
++                return;
++            }
++            if (active) {
++                mCachedAppOptimizer.noteCameraStart(uid);
++            } else {
++                mCachedAppOptimizer.noteCameraStop(uid);
++            }
++        }
++
++        @Override
++        public void noteCameraReset() {
++            if (mCachedAppOptimizer != null) {
++                mCachedAppOptimizer.noteCameraReset();
++            }
++        }
++
+         @Override
+         public void setBooting(boolean booting) {
+             mBooting = booting;
+@@ -20458,7 +20478,10 @@ public class ActivityManagerService extends IActivityManager.Stub
+                 }
+             }
+ 
+-            if (freezePolicy) {
++            final boolean effectiveFreezePolicy = freezePolicy
++                    && (mCachedAppOptimizer == null
++                            || !mCachedAppOptimizer.hasActiveCamera(app.uid));
++            if (effectiveFreezePolicy) {
+                 if (!com.android.server.notification.Flags.allowFreezingIdleNls()
+                         && newOomAdj < CACHED_APP_MIN_ADJ) {
+                     Slog.wtfStack(TAG, "Unexpected non-cached process may get frozen soon: "
+@@ -21573,59 +21596,123 @@ public class ActivityManagerService extends IActivityManager.Stub
+     }
+ 
+     @Override
+-    public void releaseMemory(int minAdj, int maxKillCount, boolean includeUIProcesses, boolean skipCamera) {
+-        if (minAdj == 0) return;
++    public void releaseMemory(int minAdj, int maxKillCount, boolean includeUIProcesses,
++            boolean skipCamera) {
++        if (checkCallingPermission(android.Manifest.permission.KILL_BACKGROUND_PROCESSES)
++                != PERMISSION_GRANTED) {
++            throw new SecurityException("Permission Denial: releaseMemory() requires "
++                    + android.Manifest.permission.KILL_BACKGROUND_PROCESSES);
++        }
++        if (minAdj <= 0 || maxKillCount <= 0) {
++            return;
++        }
+ 
++        final long callingId = Binder.clearCallingIdentity();
+         try {
+-            ArrayList<ProcessRecord> processList = 
+-                (ArrayList<ProcessRecord>) mProcessList.getLruProcessesLOSP().clone();
+-
+-            ArrayList<ProcessToKill> toKill = new ArrayList<>();
+-
+-            for (ProcessRecord record : processList) {
+-                if (record != null && record.getSetAdj() >= minAdj) {
+-                    boolean hasUI = record.hasActivities();
+-                    if (!hasUI || includeUIProcesses) {
+-                        toKill.add(new ProcessToKill(
+-                            record.getPid(),
+-                            record.getSetAdj(),
+-                            record.processName
+-                        ));
++            synchronized (mGlobalLock) {
++                final ArrayList<ProcessRecord> lru = mProcessList.getLruProcessesLOSP();
++                final ArrayList<ProcessRecord> toKill = new ArrayList<>();
++                for (int i = lru.size() - 1; i >= 0; i--) {
++                    final ProcessRecord record = lru.get(i);
++                    if (record == null
++                            || record.isPersistent()
++                            || record.isRemoved()
++                            || record.isKilled()
++                            || record.isKilledByAm()
++                            || record.getPid() <= 0
++                            || record.getSetAdj() < minAdj
++                            || (!includeUIProcesses && record.hasActivities())
++                            || (skipCamera && isCameraProcessLocked(record))) {
++                        continue;
+                     }
++                    toKill.add(record);
+                 }
+-            }
+-
+-            Collections.sort(toKill, new ProcessComparator());
+ 
+-            int killedCount = 0;
+-            for (ProcessToKill info : toKill) {
+-                Process.killProcess(info.pid);
+-                killedCount++;
++                toKill.sort((a, b) -> Integer.compare(b.getSetAdj(), a.getSetAdj()));
+ 
+-                if (killedCount >= maxKillCount) {
+-                    return;
++                int killedCount = 0;
++                for (int i = 0; i < toKill.size() && killedCount < maxKillCount; i++) {
++                    final ProcessRecord record = toKill.get(i);
++                    if (mProcessList.removeProcessLocked(
++                            record,
++                            false /* callerWillRestart */,
++                            true /* allowRestart */,
++                            ApplicationExitInfo.REASON_USER_REQUESTED,
++                            ApplicationExitInfo.SUBREASON_KILL_BACKGROUND,
++                            "releaseMemory")) {
++                        killedCount++;
++                    }
++                }
++                if (killedCount > 0) {
++                    updateOomAdjLocked(OOM_ADJ_REASON_PROCESS_END);
+                 }
+             }
+-
+-        } catch (Exception e) {}
++        } finally {
++            Binder.restoreCallingIdentity(callingId);
++        }
+     }
+ 
+-    public class ProcessComparator implements Comparator<ProcessToKill> {
+-        @Override
+-        public int compare(ProcessToKill p1, ProcessToKill p2) {
+-            return Integer.compare(p2.adj, p1.adj);
++    private static boolean isCameraPackageName(String pkg) {
++        if (pkg == null || pkg.isEmpty()) {
++            return false;
++        }
++        final String[] knownCameraPkgs = {
++            "com.android.camera",
++            "com.miui.camera",
++            "org.lineageos.aperture",
++            "org.codeaurora.snapcam",
++            "com.android.camera2",
++        };
++        for (String cam : knownCameraPkgs) {
++            if (pkg.equals(cam) || pkg.startsWith(cam + ":")) {
++                return true;
++            }
++        }
++        final String preloadProp = SystemProperties.get("ro.config.app_preload.component", "");
++        if (!preloadProp.isEmpty()) {
++            final ComponentName cn = ComponentName.unflattenFromString(preloadProp);
++            if (cn != null) {
++                final String preloadPkg = cn.getPackageName();
++                if (preloadPkg.toLowerCase(java.util.Locale.ROOT).contains("camera")
++                        && (pkg.equals(preloadPkg) || pkg.startsWith(preloadPkg + ":"))) {
++                    return true;
++                }
++            }
+         }
++        return false;
+     }
+ 
+-    public static final class ProcessToKill {
+-        public int adj;
+-        public String name; 
+-        public int pid;
++    void onCameraStateChanged(int uid) {
++        if (mCachedAppOptimizer == null || !mCachedAppOptimizer.useFreezer()
++                || mProcessList == null || mOomAdjuster == null) {
++            return;
++        }
++        synchronized (mGlobalLock) {
++            synchronized (mProcLock) {
++                mProcessList.forEachLruProcessesLOSP(false, proc -> {
++                    if (proc.uid == uid && !proc.isKilledByAm() && proc.getPid() > 0) {
++                        mOomAdjuster.updateAppFreezeStateLSP(
++                                proc,
++                                ActivityManagerInternal.OOM_ADJ_REASON_NONE,
++                                false,
++                                proc.getCurAdj(),
++                                proc.getCurAdj());
++                    }
++                });
++            }
++        }
++    }
+ 
+-        public ProcessToKill(int pid, int adj, String name) {
+-            this.pid = pid;
+-            this.adj = adj;
+-            this.name = name;
++    private boolean isCameraProcessLocked(ProcessRecord record) {
++        if (isCameraPackageName(record.processName)) {
++            return true;
++        }
++        if (record.info != null && isCameraPackageName(record.info.packageName)) {
++            return true;
+         }
++        final PackageList pkgList = record.getPkgList();
++        return pkgList != null
++                && pkgList.searchEachPackage(
++                        pkg -> isCameraPackageName(pkg) ? Boolean.TRUE : null) != null;
+     }
+ }
 diff --git a/services/core/java/com/android/server/am/AppPreloader.java b/services/core/java/com/android/server/am/AppPreloader.java
 new file mode 100644
-index 000000000..e4b05daee
+index 000000000..2662c6c50
 --- /dev/null
 +++ b/services/core/java/com/android/server/am/AppPreloader.java
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,155 @@
 +/*
 + * Copyright (C) 2026 RisingOS mondrian (unofficial)
 + *
@@ -63,12 +349,15 @@ index 000000000..e4b05daee
 +import android.content.IntentFilter;
 +import android.content.pm.ApplicationInfo;
 +import android.content.pm.PackageManager;
++import android.hardware.display.DisplayManager;
 +import android.os.Debug;
 +import android.os.Handler;
++import android.os.PowerManager;
 +import android.os.SystemClock;
 +import android.os.SystemProperties;
 +import android.os.UserHandle;
 +import android.util.Slog;
++import android.view.Display;
 +
 +import com.android.internal.os.BackgroundThread;
 +
@@ -127,11 +416,14 @@ index 000000000..e4b05daee
 +        mMinAvailKb = SystemProperties.getLong(PROP_MIN_AVAIL_MB, 1536) * 1024;
 +        mHandler.post(() -> {
 +            final IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
++            filter.addAction(Intent.ACTION_SCREEN_OFF);
 +            mContext.registerReceiver(new BroadcastReceiver() {
 +                @Override
 +                public void onReceive(Context context, Intent intent) {
 +                    mHandler.removeCallbacks(mPreload);
-+                    mHandler.postDelayed(mPreload, DELAY_MS);
++                    if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
++                        mHandler.postDelayed(mPreload, DELAY_MS);
++                    }
 +                }
 +            }, filter, null, mHandler);
 +            Slog.i(TAG, "enabled for " + mComponent.flattenToShortString());
@@ -142,6 +434,13 @@ index 000000000..e4b05daee
 +
 +    private void maybePreload() {
 +        if (!SystemProperties.getBoolean(PROP_ENABLED, true)) return;
++        final PowerManager powerMgr = mContext.getSystemService(PowerManager.class);
++        if (powerMgr == null || !powerMgr.isInteractive() || powerMgr.isPowerSaveMode()) return;
++        final DisplayManager dm = mContext.getSystemService(DisplayManager.class);
++        if (dm != null) {
++            final Display display = dm.getDisplay(Display.DEFAULT_DISPLAY);
++            if (display == null || display.getState() != Display.STATE_ON) return;
++        }
 +        final long now = SystemClock.elapsedRealtime();
 +        if (now - mLastAttempt < MIN_INTERVAL_MS) return;
 +
@@ -179,12 +478,171 @@ index 000000000..e4b05daee
 +        Slog.i(TAG, "preloading " + pkg + " (MemAvailable " + (availKb / 1024) + " MB)");
 +    }
 +}
+diff --git a/services/core/java/com/android/server/am/BatteryStatsService.java b/services/core/java/com/android/server/am/BatteryStatsService.java
+index c81c8271d..606e73d5e 100644
+--- a/services/core/java/com/android/server/am/BatteryStatsService.java
++++ b/services/core/java/com/android/server/am/BatteryStatsService.java
+@@ -34,6 +34,7 @@ import android.annotation.NonNull;
+ import android.annotation.RequiresNoPermission;
+ import android.annotation.SuppressLint;
+ import android.app.ActivityManager.ProcessState;
++import android.app.ActivityManagerInternal;
+ import android.app.AlarmManager;
+ import android.app.StatsManager;
+ import android.app.usage.NetworkStatsManager;
+@@ -2237,6 +2238,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
+                 }
+             });
+         }
++        final ActivityManagerInternal amInternal =
++                LocalServices.getService(ActivityManagerInternal.class);
++        if (amInternal != null) {
++            amInternal.noteCameraStateChanged(uid, true);
++        }
+         if (DBG) Slog.d(TAG, "end noteStartCamera");
+         FrameworkStatsLog.write_non_chained(FrameworkStatsLog.CAMERA_STATE_CHANGED, uid,
+                 null, FrameworkStatsLog.CAMERA_STATE_CHANGED__STATE__ON);
+@@ -2256,6 +2262,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
+                 }
+             });
+         }
++        final ActivityManagerInternal amInternal =
++                LocalServices.getService(ActivityManagerInternal.class);
++        if (amInternal != null) {
++            amInternal.noteCameraStateChanged(uid, false);
++        }
+         FrameworkStatsLog.write_non_chained(FrameworkStatsLog.CAMERA_STATE_CHANGED, uid,
+                 null, FrameworkStatsLog.CAMERA_STATE_CHANGED__STATE__OFF);
+     }
+@@ -2274,6 +2285,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
+                 }
+             });
+         }
++        final ActivityManagerInternal amInternal =
++                LocalServices.getService(ActivityManagerInternal.class);
++        if (amInternal != null) {
++            amInternal.noteCameraReset();
++        }
+         FrameworkStatsLog.write_non_chained(FrameworkStatsLog.CAMERA_STATE_CHANGED, -1,
+                 null, FrameworkStatsLog.CAMERA_STATE_CHANGED__STATE__RESET);
+     }
+diff --git a/services/core/java/com/android/server/am/CachedAppOptimizer.java b/services/core/java/com/android/server/am/CachedAppOptimizer.java
+index eb662b11d..bcc9b2a53 100644
+--- a/services/core/java/com/android/server/am/CachedAppOptimizer.java
++++ b/services/core/java/com/android/server/am/CachedAppOptimizer.java
+@@ -99,6 +99,7 @@ import android.util.IntArray;
+ import android.util.Pair;
+ import android.util.Slog;
+ import android.util.SparseArray;
++import android.util.SparseIntArray;
+ 
+ import com.android.internal.annotations.GuardedBy;
+ import com.android.internal.annotations.Keep;
+@@ -456,6 +457,10 @@ public class CachedAppOptimizer {
+ 
+     public final Object mFreezerLock = new Object();
+ 
++    private final Object mCameraLock = new Object();
++    @GuardedBy("mCameraLock")
++    private final SparseIntArray mActiveCameraUids = new SparseIntArray();
++
+     private final OnPropertiesChangedListener mOnFlagsChangedListener =
+             new OnPropertiesChangedListener() {
+                 @Override
+@@ -1761,6 +1766,72 @@ public class CachedAppOptimizer {
+         }
+     }
+ 
++    void noteCameraStart(int uid) {
++        if (uid < 0) {
++            return;
++        }
++        final boolean becameActive;
++        synchronized (mCameraLock) {
++            final int count = mActiveCameraUids.get(uid, 0);
++            mActiveCameraUids.put(uid, count + 1);
++            becameActive = count == 0;
++        }
++        if (becameActive && mUseFreezer && mAm != null && mAm.mHandler != null) {
++            mAm.mHandler.post(() -> mAm.onCameraStateChanged(uid));
++        }
++    }
++
++    void noteCameraStop(int uid) {
++        if (uid < 0) {
++            return;
++        }
++        final boolean becameIdle;
++        synchronized (mCameraLock) {
++            final int count = mActiveCameraUids.get(uid, 0);
++            if (count <= 0) {
++                return;
++            }
++            if (count == 1) {
++                mActiveCameraUids.delete(uid);
++                becameIdle = true;
++            } else {
++                mActiveCameraUids.put(uid, count - 1);
++                becameIdle = false;
++            }
++        }
++        if (becameIdle && mUseFreezer && mAm != null && mAm.mHandler != null) {
++            mAm.mHandler.post(() -> mAm.onCameraStateChanged(uid));
++        }
++    }
++
++    void noteCameraReset() {
++        final int[] clearedUids;
++        synchronized (mCameraLock) {
++            final int size = mActiveCameraUids.size();
++            if (size == 0) {
++                return;
++            }
++            clearedUids = new int[size];
++            for (int i = 0; i < size; i++) {
++                clearedUids[i] = mActiveCameraUids.keyAt(i);
++            }
++            mActiveCameraUids.clear();
++        }
++        if (mUseFreezer && mAm != null && mAm.mHandler != null) {
++            mAm.mHandler.post(() -> {
++                for (int uid : clearedUids) {
++                    mAm.onCameraStateChanged(uid);
++                }
++            });
++        }
++    }
++
++    boolean hasActiveCamera(int uid) {
++        synchronized (mCameraLock) {
++            return mActiveCameraUids.get(uid, 0) > 0;
++        }
++    }
++
+     private IMmd getMmd() {
+         if (mMmd == null) {
+             IBinder b = ServiceManager.getService(MMD_SERVICE_NAME);
+@@ -2547,6 +2618,14 @@ public class CachedAppOptimizer {
+                     return;
+                 }
+ 
++                if (hasActiveCamera(proc.uid)) {
++                    if (DEBUG_FREEZER) {
++                        Slog.d(TAG_AM, "Skipping freeze for process " + pid
++                                + " " + name + " (active camera)");
++                    }
++                    return;
++                }
++
+                 if (pid == 0 || opt.isFrozen()) {
+                     // Already frozen or not a real process, either one being
+                     // launched or one being killed
 diff --git a/services/core/java/com/android/server/am/psc/FrequentAppTracker.java b/services/core/java/com/android/server/am/psc/FrequentAppTracker.java
 new file mode 100644
-index 000000000..5d12b2039
+index 000000000..1f6ecb7ee
 --- /dev/null
 +++ b/services/core/java/com/android/server/am/psc/FrequentAppTracker.java
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,400 @@
 +/*
 + * Copyright (C) 2026 RisingOS mondrian (unofficial)
 + *
@@ -203,15 +661,25 @@ index 000000000..5d12b2039
 +
 +package com.android.server.am.psc;
 +
++import android.content.ComponentName;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.content.pm.PackageManagerInternal;
++import android.content.pm.ResolveInfo;
 +import android.os.Environment;
 +import android.os.Process;
 +import android.os.SystemClock;
 +import android.os.SystemProperties;
++import android.os.UserHandle;
++import android.util.ArrayMap;
++import android.util.ArraySet;
 +import android.util.AtomicFile;
 +import android.util.Slog;
 +import android.util.SparseArray;
 +
++import com.android.internal.annotations.GuardedBy;
 +import com.android.internal.os.BackgroundThread;
++import com.android.server.LocalServices;
 +
 +import java.io.BufferedReader;
 +import java.io.File;
@@ -223,26 +691,32 @@ index 000000000..5d12b2039
 +import java.nio.charset.StandardCharsets;
 +import java.util.ArrayList;
 +import java.util.Arrays;
++import java.util.List;
++import java.util.Locale;
 +
 +/**
 + * Usage-aware cached-app protection.
 + *
-+ * <p>Counts how often each app is used (each time it leaves the TOP state, debounced) with an
-+ * exponentially decaying score. The main processes of the N highest-scoring apps get the lowest
-+ * cached oom_score_adj ({@link Constants#CACHED_APP_MIN_ADJ}) exclusively, so lmkd kills every
-+ * other cached process before them. They stay cached (frozen and compacted as usual).
++ * <p>Counts how often each launchable user app is used (each time it leaves the TOP state,
++ * debounced) with an exponentially decaying score. The main processes of the N highest-scoring
++ * eligible apps — plus the configured camera package without consuming a Top-N slot — get the
++ * lowest cached oom_score_adj ({@link Constants#CACHED_APP_MIN_ADJ}) exclusively, so lmkd kills
++ * every other cached process before them. They stay cached (frozen and compacted as usual).
 + *
-+ * <p>{@code persist.sys.lmk.protect_frequent} = number of apps to protect (default 5, 0 = off).
++ * <p>{@code persist.sys.lmk.protect_frequent} = number of apps to protect (default 8, 0 = off).
 + * Scores are persisted in {@code /data/system/frequent_apps.txt} so protection survives reboots.
 + *
-+ * <p>All methods are cheap and only take this object's lock (a leaf lock).
++ * <p>All hot-path methods are cheap and only take this object's lock (a leaf lock); package
++ * eligibility checks are performed asynchronously on {@link BackgroundThread}.
 + */
 +final class FrequentAppTracker {
 +    private static final String TAG = "FrequentApps";
 +
 +    static final String PROP_COUNT = "persist.sys.lmk.protect_frequent";
-+    private static final int DEFAULT_COUNT = 5;
++    private static final int DEFAULT_COUNT = 8;
 +    private static final int MAX_COUNT = 15;
++    private static final String PROP_PRELOAD_COMPONENT = "ro.config.app_preload.component";
++    private static final String DEFAULT_CAMERA_PACKAGE = "com.android.camera";
 +
 +    /** Score half-life: a use 3 days ago counts half. */
 +    private static final double HALF_LIFE_MS = 3 * 24 * 3600_000.0;
@@ -261,15 +735,26 @@ index 000000000..5d12b2039
 +    }
 +
 +    private final Object mLock = new Object();
++    @GuardedBy("mLock")
 +    private final SparseArray<Entry> mEntries = new SparseArray<>();
++    @GuardedBy("mLock")
++    private final ArrayMap<String, Boolean> mEligibleCache = new ArrayMap<>();
++    @GuardedBy("mLock")
++    private final ArraySet<String> mPendingEligibilityChecks = new ArraySet<>();
 +    private final AtomicFile mFile;
++    private final String mCameraPackage;
 +
 +    // Snapshot of protected uids, rebuilt at most every RECOMPUTE_INTERVAL_MS.
++    @GuardedBy("mLock")
 +    private int[] mProtectedUids = new int[0];
++    @GuardedBy("mLock")
 +    private long mLastComputeElapsed = -RECOMPUTE_INTERVAL_MS;
++    @GuardedBy("mLock")
 +    private boolean mWriteScheduled;
++    private volatile boolean mCameraProtectedSeen;
 +
 +    FrequentAppTracker() {
++        mCameraPackage = resolveCameraPackage();
 +        mFile = new AtomicFile(new File(Environment.getDataSystemDirectory(),
 +                "frequent_apps.txt"));
 +        load();
@@ -284,6 +769,13 @@ index 000000000..5d12b2039
 +        if (pkg == null || !pkg.equals(app.processName)) return; // main process only
 +        final long now = System.currentTimeMillis();
 +        synchronized (mLock) {
++            final Boolean eligible = mEligibleCache.get(pkg);
++            if (Boolean.FALSE.equals(eligible)) {
++                return;
++            }
++            if (eligible == null) {
++                scheduleEligibilityCheckLocked(pkg, UserHandle.getUserId(uid));
++            }
 +            Entry e = mEntries.get(uid);
 +            if (e == null) {
 +                if (mEntries.size() >= MAX_ENTRIES) pruneLocked(now);
@@ -302,13 +794,19 @@ index 000000000..5d12b2039
 +    /** Whether this cached process should get the protected (lowest) cached adj. */
 +    boolean isProtected(ProcessRecordInternal app) {
 +        if (app.isolated) return false;
++        final int uid = app.getApplicationUid();
++        if (!isAppUid(uid)) return false;
++        final String pkg = app.getPackageName();
++        if (pkg == null || !pkg.equals(app.processName)) return false;
++        if (getConfiguredCount() > 0 && mCameraPackage.equals(pkg)) {
++            mCameraProtectedSeen = true;
++            return true;
++        }
 +        final int[] uids = getProtectedUids();
 +        if (uids.length == 0) return false;
-+        final int uid = app.getApplicationUid();
 +        for (int u : uids) {
 +            if (u == uid) {
-+                final String pkg = app.getPackageName();
-+                return pkg != null && pkg.equals(app.processName);
++                return true;
 +            }
 +        }
 +        return false;
@@ -316,7 +814,27 @@ index 000000000..5d12b2039
 +
 +    /** Whether any app is protected right now (others are then kept above the minimum adj). */
 +    boolean isActive() {
-+        return getProtectedUids().length > 0;
++        return getProtectedUids().length > 0
++                || (mCameraProtectedSeen && getConfiguredCount() > 0);
++    }
++
++    private static int getConfiguredCount() {
++        final int count = SystemProperties.getInt(PROP_COUNT, DEFAULT_COUNT);
++        return Math.max(0, Math.min(MAX_COUNT, count));
++    }
++
++    private static String resolveCameraPackage() {
++        final String comp = SystemProperties.get(PROP_PRELOAD_COMPONENT, "");
++        if (!comp.isEmpty()) {
++            final ComponentName cn = ComponentName.unflattenFromString(comp);
++            if (cn != null) {
++                final String pkg = cn.getPackageName();
++                if (pkg != null && pkg.toLowerCase(Locale.ROOT).contains("camera")) {
++                    return pkg;
++                }
++            }
++        }
++        return DEFAULT_CAMERA_PACKAGE;
 +    }
 +
 +    private int[] getProtectedUids() {
@@ -330,14 +848,34 @@ index 000000000..5d12b2039
 +        }
 +    }
 +
++    @GuardedBy("mLock")
 +    private void recomputeLocked() {
-+        int count = SystemProperties.getInt(PROP_COUNT, DEFAULT_COUNT);
-+        count = Math.max(0, Math.min(MAX_COUNT, count));
++        final int count = getConfiguredCount();
 +        final long now = System.currentTimeMillis();
 +        final ArrayList<double[]> candidates = new ArrayList<>(); // {score, uid}
-+        for (int i = 0; i < mEntries.size(); i++) {
-+            final double s = decayed(mEntries.valueAt(i), now);
-+            if (s >= MIN_SCORE) candidates.add(new double[] {s, mEntries.keyAt(i)});
++        boolean purged = false;
++        for (int i = mEntries.size() - 1; i >= 0; i--) {
++            final int uid = mEntries.keyAt(i);
++            final Entry e = mEntries.valueAt(i);
++            final String pkg = e.packageName;
++            final Boolean eligible = mEligibleCache.get(pkg);
++            if (Boolean.FALSE.equals(eligible)) {
++                mEntries.removeAt(i);
++                purged = true;
++                continue;
++            }
++            if (eligible == null && pkg != null) {
++                scheduleEligibilityCheckLocked(pkg, UserHandle.getUserId(uid));
++            }
++            // Camera is protected unconditionally in isProtected() without taking a Top-N slot.
++            if (mCameraPackage.equals(pkg)) {
++                continue;
++            }
++            final double s = decayed(e, now);
++            if (s >= MIN_SCORE) candidates.add(new double[] {s, uid});
++        }
++        if (purged) {
++            scheduleWriteLocked();
 +        }
 +        candidates.sort((a, b) -> Double.compare(b[0], a[0]));
 +        final int n = Math.min(count, candidates.size());
@@ -346,12 +884,81 @@ index 000000000..5d12b2039
 +        if (!Arrays.equals(result, mProtectedUids)) {
 +            final StringBuilder sb = new StringBuilder("protected:");
 +            for (int i = 0; i < n; i++) {
-+                sb.append(' ').append(mEntries.get(result[i]).packageName).append('(')
-+                        .append(String.format("%.1f", candidates.get(i)[0])).append(')');
++                final Entry entry = mEntries.get(result[i]);
++                if (entry != null) {
++                    sb.append(' ').append(entry.packageName).append('(')
++                            .append(String.format("%.1f", candidates.get(i)[0])).append(')');
++                }
 +            }
 +            Slog.i(TAG, sb.toString());
 +        }
 +        mProtectedUids = result;
++    }
++
++    @GuardedBy("mLock")
++    private void scheduleEligibilityCheckLocked(String pkg, int userId) {
++        if (pkg == null || pkg.isEmpty() || !mPendingEligibilityChecks.add(pkg)) {
++            return;
++        }
++        BackgroundThread.getHandler().post(() -> resolveEligibility(pkg, userId));
++    }
++
++    private void resolveEligibility(String pkg, int userId) {
++        final PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
++        if (pmi == null) {
++            synchronized (mLock) {
++                mPendingEligibilityChecks.remove(pkg);
++            }
++            return;
++        }
++
++        boolean eligible = false;
++        try {
++            if (!pmi.isPackagePersistent(pkg)) {
++                final long homeFlags = PackageManager.MATCH_DISABLED_COMPONENTS
++                        | PackageManager.MATCH_DIRECT_BOOT_AWARE
++                        | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
++                final Intent homeIntent = new Intent(Intent.ACTION_MAIN)
++                        .addCategory(Intent.CATEGORY_HOME)
++                        .setPackage(pkg);
++                final List<ResolveInfo> homes = pmi.queryIntentActivities(
++                        homeIntent, null, homeFlags, Process.SYSTEM_UID, userId);
++                if (homes == null || homes.isEmpty()) {
++                    final long launchFlags = PackageManager.MATCH_DIRECT_BOOT_AWARE
++                            | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
++                    final Intent launchIntent = new Intent(Intent.ACTION_MAIN)
++                            .addCategory(Intent.CATEGORY_LAUNCHER)
++                            .setPackage(pkg);
++                    final List<ResolveInfo> launchers = pmi.queryIntentActivities(
++                            launchIntent, null, launchFlags, Process.SYSTEM_UID, userId);
++                    eligible = launchers != null && !launchers.isEmpty();
++                }
++            }
++        } catch (RuntimeException e) {
++            synchronized (mLock) {
++                mPendingEligibilityChecks.remove(pkg);
++            }
++            return;
++        }
++
++        synchronized (mLock) {
++            mPendingEligibilityChecks.remove(pkg);
++            mEligibleCache.put(pkg, eligible);
++            if (!eligible) {
++                boolean removed = false;
++                for (int i = mEntries.size() - 1; i >= 0; i--) {
++                    if (pkg.equals(mEntries.valueAt(i).packageName)) {
++                        mEntries.removeAt(i);
++                        removed = true;
++                    }
++                }
++                if (removed) {
++                    scheduleWriteLocked();
++                    mLastComputeElapsed = SystemClock.elapsedRealtime();
++                    recomputeLocked();
++                }
++            }
++        }
 +    }
 +
 +    private static double decayed(Entry e, long nowWall) {
@@ -364,6 +971,7 @@ index 000000000..5d12b2039
 +        return appId >= Process.FIRST_APPLICATION_UID && appId <= Process.LAST_APPLICATION_UID;
 +    }
 +
++    @GuardedBy("mLock")
 +    private void pruneLocked(long now) {
 +        int worst = -1;
 +        double worstScore = Double.MAX_VALUE;
@@ -377,6 +985,7 @@ index 000000000..5d12b2039
 +        if (worst >= 0) mEntries.removeAt(worst);
 +    }
 +
++    @GuardedBy("mLock")
 +    private void scheduleWriteLocked() {
 +        if (mWriteScheduled) return;
 +        mWriteScheduled = true;
@@ -435,7 +1044,7 @@ index 000000000..5d12b2039
 +    }
 +}
 diff --git a/services/core/java/com/android/server/am/psc/OomAdjuster.java b/services/core/java/com/android/server/am/psc/OomAdjuster.java
-index de3a9358d..cd4485f1a 100644
+index de3a9358d..3c9cb5cae 100644
 --- a/services/core/java/com/android/server/am/psc/OomAdjuster.java
 +++ b/services/core/java/com/android/server/am/psc/OomAdjuster.java
 @@ -336,6 +336,9 @@ public abstract class OomAdjuster {
@@ -464,7 +1073,7 @@ index de3a9358d..cd4485f1a 100644
              } else if (!app.isKilledByAm() && app.isProcessRunning() && curAdj >= UNKNOWN_ADJ) {
                  // If we haven't yet assigned the final cached adj to the process, do that now.
                  final ProcessServiceRecordInternal psr = app.getServices();
-+                if (protectFrequent && mFrequentApps.isProtected(app)) {
++                if (mFrequentApps.isProtected(app)) {
 +                    app.setCurRawAdj(CACHED_APP_MIN_ADJ);
 +                    app.setCurAdj(applyBindAboveClientToAdj(psr.hasBindAboveClient(),
 +                            CACHED_APP_MIN_ADJ));
@@ -485,14 +1094,119 @@ index de3a9358d..cd4485f1a 100644
                          app.setCurRawAdj(rawAdj);
                          app.setCurAdj(
                                  applyBindAboveClientToAdj(psr.hasBindAboveClient(), rawAdj));
-@@ -2623,6 +2640,7 @@ public abstract class OomAdjuster {
+@@ -2619,10 +2636,14 @@ public abstract class OomAdjuster {
+         };
+     }
+ 
++    @GuardedBy("mServiceLock")
+     private void maybeUpdateLastTopTime(ProcessRecordInternal state, long nowUptime) {
          if (state.getSetProcState() <= PROCESS_STATE_TOP
                  && state.getCurProcState() > PROCESS_STATE_TOP) {
              state.setLastTopTime(nowUptime);
-+            mFrequentApps.noteLeftTop(state);
++            if (state.getMaxAdj() >= FOREGROUND_APP_ADJ && !isHomeProcess(state)) {
++                mFrequentApps.noteLeftTop(state);
++            }
          }
      }
  
+diff --git a/services/core/java/com/android/server/memory/ZramMaintenance.java b/services/core/java/com/android/server/memory/ZramMaintenance.java
+index 560d2d741..e0869fbf2 100644
+--- a/services/core/java/com/android/server/memory/ZramMaintenance.java
++++ b/services/core/java/com/android/server/memory/ZramMaintenance.java
+@@ -25,6 +25,7 @@ import android.content.Context;
+ import android.os.IBinder;
+ import android.os.IMmd;
+ import android.os.PersistableBundle;
++import android.os.PowerManager;
+ import android.os.RemoteException;
+ import android.os.ServiceManager;
+ import android.os.SystemProperties;
+@@ -69,7 +70,7 @@ public class ZramMaintenance extends JobService {
+     private static final String REQUIRE_DEVICE_IDLE_PROP =
+             "zram.maintenance.require_device_idle";
+     private static final boolean DEFAULT_REQUIRE_DEVICE_IDLE =
+-            true;
++            false;
+     private static final String REQUIRE_BATTERY_NOT_LOW_PROP =
+             "zram.maintenance.require_battery_not_low";
+     private static final boolean DEFAULT_REQUIRE_BATTERY_NOT_LOW =
+@@ -119,7 +120,13 @@ public class ZramMaintenance extends JobService {
+                 // Status check is required before the first doZramMaintenanceAsync() call once.
+                 checkStatus = false;
+ 
+-                mmd.doZramMaintenanceAsync();
++                final PowerManager pm = context.getSystemService(PowerManager.class);
++                if (pm != null && (pm.isPowerSaveMode()
++                        || pm.getCurrentThermalStatus() >= PowerManager.THERMAL_STATUS_MODERATE)) {
++                    Slog.i(TAG, "skipping zram maintenance due to power save or thermal status");
++                } else {
++                    mmd.doZramMaintenanceAsync();
++                }
+             } catch (RemoteException e) {
+                 Slog.e(TAG, "Failed to binder call to mmd", e);
+             }
+diff --git a/services/core/java/com/android/server/policy/PhoneWindowManager.java b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index ad8542cd3..2a455aebc 100644
+--- a/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -436,9 +436,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+     private static final String ACTION_TORCH_OFF =
+             "com.android.server.policy.PhoneWindowManager.ACTION_TORCH_OFF";
+ 
+-    private static final long MEMORY_RELEASE_INTERVAL_MS = 10 * 60 * 1000L; // 10 minutes
+-    private long lastMemoryReleaseTime = 0L;
+-
+     /**
+      * Keyguard stuff
+      */
+@@ -6441,7 +6438,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+             mPocketManager.onInteractiveChanged(false);
+         }
+ 
+-        mHandler.removeCallbacks(mMemoryOpt);
+     }
+ 
+     // Called on the PowerManager's Notifier thread.
+@@ -6503,9 +6499,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+ 
+         EventLogTags.writeScreenToggled(1);
+ 
+-        mHandler.removeCallbacks(mMemoryOpt);
+-        mHandler.postDelayed(mMemoryOpt, 1250 /* allowance time */);
+-
+         mIsGoingToSleep = false;
+         setPendingWakingUpGroup(displayGroupId);
+         mDefaultDisplayPolicy.setAwake(true);
+@@ -6553,13 +6546,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+         }
+     }
+ 
+-    private final Runnable mMemoryOpt = new Runnable() {
+-        @Override
+-        public void run() {
+-            releaseMemoryAtScreenOn();
+-        }
+-    };
+-
+     private boolean shouldWakeUpWithHomeIntent() {
+         if (mWakeUpToLastStateTimeout <= 0) {
+             return false;
+@@ -8295,15 +8281,4 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+                 break;
+         }
+     }
+-
+-    private void releaseMemoryAtScreenOn() {
+-        long currentTime = System.currentTimeMillis();
+-        if (lastMemoryReleaseTime == 0L || currentTime - lastMemoryReleaseTime > MEMORY_RELEASE_INTERVAL_MS) {
+-            try {
+-                ActivityManager.getService().releaseMemory(900, 20, false, false);
+-                lastMemoryReleaseTime = currentTime;
+-            } catch (RemoteException e) {
+-            }
+-        }
+-    }
+ }
 diff --git a/services/core/java/com/android/server/spoof/AxSpoofManager.java b/services/core/java/com/android/server/spoof/AxSpoofManager.java
 index 67d30f685..f3305fb22 100644
 --- a/services/core/java/com/android/server/spoof/AxSpoofManager.java
@@ -609,3 +1323,80 @@ index 67d30f685..f3305fb22 100644
          killGmsFamily();
          Log.i(TAG, "PIF config cleared, dropped staged PIF props");
  
+diff --git a/services/tests/servicestests/src/com/android/server/memory/ZramMaintenanceTest.kt b/services/tests/servicestests/src/com/android/server/memory/ZramMaintenanceTest.kt
+index 1f59f45b0..ed20a95b6 100644
+--- a/services/tests/servicestests/src/com/android/server/memory/ZramMaintenanceTest.kt
++++ b/services/tests/servicestests/src/com/android/server/memory/ZramMaintenanceTest.kt
+@@ -21,6 +21,7 @@ import android.app.job.JobParameters
+ import android.app.job.JobScheduler
+ import android.os.IMmd
+ import android.os.PersistableBundle
++import android.os.PowerManager
+ import android.os.RemoteException
+ import android.testing.TestableContext
+ import androidx.test.filters.SmallTest
+@@ -62,11 +63,17 @@ class ZramMaintenanceTest {
+     @Mock
+     private lateinit var mockMmd: IMmd
+ 
++    @Mock
++    private lateinit var mockPowerManager: PowerManager
++
+     @Before
+     @Throws(RemoteException::class)
+     fun setUp() {
+         MockitoAnnotations.initMocks(this)
++        `when`(mockPowerManager.isPowerSaveMode).thenReturn(false)
++        `when`(mockPowerManager.currentThermalStatus).thenReturn(PowerManager.THERMAL_STATUS_NONE)
+         context.addMockSystemService(JobScheduler::class.java, mockJobScheduler)
++        context.addMockSystemService(PowerManager::class.java, mockPowerManager)
+     }
+ 
+     @Test
+@@ -77,6 +84,8 @@ class ZramMaintenanceTest {
+         val job = jobInfoCaptor.value
+         assertThat(job.id).isEqualTo(ZramMaintenance.JOB_ID)
+         assertThat(job.extras.getBoolean(ZramMaintenance.KEY_CHECK_STATUS)).isTrue()
++        assertThat(job.isRequireDeviceIdle).isFalse()
++        assertThat(job.isRequireBatteryNotLow).isTrue()
+     }
+ 
+     @Test
+@@ -151,4 +160,36 @@ class ZramMaintenanceTest {
+         assertThat(nextJob.id).isEqualTo(ZramMaintenance.JOB_ID)
+         assertThat(nextJob.extras.getBoolean(ZramMaintenance.KEY_CHECK_STATUS)).isTrue()
+     }
++
++    @Test
++    fun startJobSkipsWhenPowerSaveModeEnabled() {
++        val extras = PersistableBundle()
++        extras.putBoolean(ZramMaintenance.KEY_CHECK_STATUS, false)
++        val params = generateJobParameters(ZramMaintenance.JOB_ID, extras)
++        `when`(mockPowerManager.isPowerSaveMode).thenReturn(true)
++
++        ZramMaintenance.startJob(context, params, mockMmd)
++
++        verify(mockMmd, never()).doZramMaintenanceAsync()
++        verify(mockJobScheduler, times(1)).schedule(jobInfoCaptor.capture())
++        val nextJob = jobInfoCaptor.value
++        assertThat(nextJob.id).isEqualTo(ZramMaintenance.JOB_ID)
++        assertThat(nextJob.extras.getBoolean(ZramMaintenance.KEY_CHECK_STATUS)).isFalse()
++    }
++
++    @Test
++    fun startJobSkipsWhenThermalStatusModerateOrHigher() {
++        val extras = PersistableBundle()
++        extras.putBoolean(ZramMaintenance.KEY_CHECK_STATUS, false)
++        val params = generateJobParameters(ZramMaintenance.JOB_ID, extras)
++        `when`(mockPowerManager.currentThermalStatus).thenReturn(PowerManager.THERMAL_STATUS_MODERATE)
++
++        ZramMaintenance.startJob(context, params, mockMmd)
++
++        verify(mockMmd, never()).doZramMaintenanceAsync()
++        verify(mockJobScheduler, times(1)).schedule(jobInfoCaptor.capture())
++        val nextJob = jobInfoCaptor.value
++        assertThat(nextJob.id).isEqualTo(ZramMaintenance.JOB_ID)
++        assertThat(nextJob.extras.getBoolean(ZramMaintenance.KEY_CHECK_STATUS)).isFalse()
++    }
+ }
+\ No newline at end of file

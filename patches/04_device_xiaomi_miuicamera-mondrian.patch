@@ -49,3 +49,23 @@ index f1c5be9..8c71431 100644
  binder_call(hal_camera_default, cameraserver)
  
  allow hal_camera_default mnt_vendor_file:dir { search };
+diff --git a/sepolicy/vendor/platform_app_36.te b/sepolicy/vendor/platform_app_36.te
+new file mode 100644
+index 0000000..2dc7a0a
+--- /dev/null
++++ b/sepolicy/vendor/platform_app_36.te
+@@ -0,0 +1,14 @@
++# Android 17 puts platform-signed apps with targetSdk < 37 (MiuiCamera targets 34)
++# into platform_app_36 instead of platform_app. Mirror platform_app.te so the
++# camera can find IMiPostProcService (otherwise SIGSEGV in libmicampostproc_client).
++allow platform_app_36 app_data_file:file execute;
++allow platform_app_36 vendor_hal_camerapostproc_xiaomi_hwservice:hwservice_manager find;
++
++binder_call(platform_app_36, hal_camera_default)
++
++allow platform_app_36 vendor_audio_prop:file { open read getattr map };
++allow platform_app_36 vendor_camera_sensor_prop:file { open read getattr map };
++allow platform_app_36 vendor_camera_p3enable_prop:file { open read getattr map };
++
++# MiuiCamera reads vendor.panel.* (display panel info) at startup.
++get_prop(platform_app_36, vendor_panel_info_prop)
