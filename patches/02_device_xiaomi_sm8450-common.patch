@@ -55,7 +55,7 @@ index e25168f..f6a09f4 100644
  echo 0-3 > /dev/cpuset/system-background/cpus
  
 diff --git a/rootdir/bin/init.kernel.post_boot.sh b/rootdir/bin/init.kernel.post_boot.sh
-index a3bbcd4..11038d5 100644
+index a3bbcd4..1162054 100644
 --- a/rootdir/bin/init.kernel.post_boot.sh
 +++ b/rootdir/bin/init.kernel.post_boot.sh
 @@ -86,13 +86,8 @@ function configure_read_ahead_kb_values() {
@@ -82,7 +82,7 @@ index a3bbcd4..11038d5 100644
 +	# ZRAM is configured by Android 17 mmd (mmd.zram.enabled=true)
  	configure_read_ahead_kb_values
 -	echo 100 > /proc/sys/vm/swappiness
-+	echo 80 > /proc/sys/vm/swappiness
++	echo 120 > /proc/sys/vm/swappiness
 +	echo 15 > /proc/sys/vm/dirty_ratio
  
  	# Disable periodic kcompactd wakeups. We do not use THP, so having many
@@ -118,7 +118,7 @@ index 08393c5..73e1554 100644
      chown media audio /sys/kernel/wdsp0/boot
      chown media audio /sys/kernel/wcd_cpe0/fw_name
 diff --git a/rootdir/etc/init.qti.kernel.rc b/rootdir/etc/init.qti.kernel.rc
-index 15de3a8..7323c53 100644
+index 15de3a8..7c44f61 100644
 --- a/rootdir/etc/init.qti.kernel.rc
 +++ b/rootdir/etc/init.qti.kernel.rc
 @@ -49,12 +49,6 @@ on early-init
@@ -175,7 +175,7 @@ index 15de3a8..7323c53 100644
  
      # Allow access to memory hotplug device attributes
      chown system system /sys/kernel/mem-offline/anon_migrate
-@@ -159,11 +141,42 @@ service kernel-post-boot /vendor/bin/sh /vendor/bin/init.kernel.post_boot.sh
+@@ -159,11 +141,39 @@ service kernel-post-boot /vendor/bin/sh /vendor/bin/init.kernel.post_boot.sh
  
  on property:sys.boot_completed=1
      write /dev/kmsg "Boot completed "
@@ -188,9 +188,6 @@ index 15de3a8..7323c53 100644
 +    write /sys/block/dm-1/queue/read_ahead_kb 128
 +    write /sys/block/dm-2/queue/read_ahead_kb 128
      write /proc/sys/vm/page-cluster 0
-+
-+    # MGLRU: protect working-set pages accessed within 1s from premature reclaim
-+    write /sys/kernel/mm/lru_gen/min_ttl_ms 1000
 +
 +    # uclamp tuning for SM8450 (4x A510 + 3x A710 + 1x X2)
 +    write /dev/cpuctl/top-app/cpu.uclamp.min 10
