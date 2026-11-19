@@ -27,4 +27,10 @@
   <!-- frameworks/base override (fork: RisingOS-Revived) -->
   <remove-project path="frameworks/base" />
   <project path="frameworks/base" name="cute-johnny/android_frameworks_base-new" remote="gh" revision="rising-mondrian" groups="pdk-cw-fs,pdk-fs,sysui-studio" />
+
+  <!-- AOSP system repos (forks: RisingOS-Revived system/core, LineageOS system/logging) -->
+  <remove-project path="system/core" />
+  <project path="system/core" name="cute-johnny/android_system_core" remote="gh" revision="rising-mondrian" groups="pdk" />
+  <remove-project path="system/logging" />
+  <project path="system/logging" name="cute-johnny/android_system_logging" remote="gh" revision="rising-mondrian" groups="pdk" />
 </manifest>

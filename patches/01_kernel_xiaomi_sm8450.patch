@@ -4011,7 +4011,7 @@ index 16b2bc48211e..07c272909086 100644
  
  /*
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index e1fc36e241a5..a77d9115fb93 100644
+index e1fc36e241a5..cc01115c9e9d 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
 @@ -51,6 +51,10 @@
@@ -5934,7 +5934,7 @@ index e1fc36e241a5..a77d9115fb93 100644
 +
 +	if (!walk && bitmap_weight(bitmap, MIN_LRU_BATCH) < PAGEVEC_SIZE) {
 +		for_each_set_bit(i, bitmap, MIN_LRU_BATCH) {
-+			page = compound_head(pte_page(pte[i]));
++			page = pte_page(pte[i]);
 +			activate_page(page);
 +		}
 +		return;
